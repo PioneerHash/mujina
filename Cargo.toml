@@ -3,23 +3,18 @@ members = ["mujina-miner"]
 resolver = "2"
 
 [workspace.dependencies]
-# Logging and tracing
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = [
-    "time", "local-time", "env-filter" ] }
-tracing-journald = "0.3"
+bitvec = "1.0"
+bytes = "1"
+crc_all = "0.2"
+futures = "0.3"
+modular-bitfield = "0.12"
+strum = { version = "0.27", features = ["derive"] }
+test-case = "3.3.1"
 time = { version = "0.3", features = ["macros"] }
-
-# Async runtime
 tokio = { version = "1", features = ["full"] }
 tokio-serial = "5.4"
 tokio-stream = "0.1"
-tokio-util = { version = "0.7", features = ["codec"] }
-
-bytes = "1"
-bitvec = "1.0"
-crc_all = "0.2"
-futures = "0.3"
-strum = { version = "0.27", features = ["derive"] }
-test-case = "3.3.1"
-modular-bitfield = "0.12"
+tokio-util = { version = "0.7", features = ["codec", "rt"] }
+tracing = "0.1"
+tracing-journald = "0.3"
+tracing-subscriber = { version = "0.3", features = ["time", "local-time", "env-filter"] }
