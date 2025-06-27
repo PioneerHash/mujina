@@ -95,6 +95,27 @@ impl BitaxeBoard {
         Ok(())
     }
     
+    /// Hold the mining chips in reset state.
+    ///
+    /// This function pulls the reset line low and keeps it there,
+    /// effectively disabling all connected mining chips. This is used
+    /// during shutdown to ensure chips are in a safe, non-hashing state.
+    ///
+    /// # Hardware Protocol
+    /// - RSTN_LO: Pulls reset line low (active reset)
+    ///
+    /// # Errors
+    /// Returns an error if serial communication fails
+    pub async fn hold_in_reset(&mut self) -> Result<(), std::io::Error> {
+        const RSTN_LO: &[u8] = &[0x07, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00];
+
+        tracing::debug!("Control TX: RSTN_LO (holding in reset) => {:02x?}", RSTN_LO);
+        self.control.write_all(RSTN_LO).await?;
+        self.control.flush().await?;
+
+        Ok(())
+    }
+    
     /// Discover chips connected to this board.
     /// 
     /// Sends broadcast ReadRegister commands and collects responses
@@ -274,6 +295,12 @@ impl Board for BitaxeBoard {
     async fn reset(&mut self) -> Result<(), BoardError> {
         // Use the existing momentary_reset method
         self.momentary_reset().await?;
+        Ok(())
+    }
+    
+    async fn hold_in_reset(&mut self) -> Result<(), BoardError> {
+        // Call the inherent method, not the trait method
+        BitaxeBoard::hold_in_reset(self).await?;
         Ok(())
     }
     

@@ -64,6 +64,12 @@ pub trait Board: Send {
     /// to bring the board to a known state.
     async fn reset(&mut self) -> Result<(), BoardError>;
     
+    /// Hold the board's chips in reset state.
+    /// 
+    /// This keeps the reset line asserted (low) to ensure chips remain
+    /// disabled. Used during shutdown to ensure a safe state.
+    async fn hold_in_reset(&mut self) -> Result<(), BoardError>;
+    
     /// Initialize the board and discover connected chips.
     /// 
     /// After initialization, the board is ready to receive mining jobs.

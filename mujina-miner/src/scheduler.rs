@@ -191,9 +191,10 @@ pub async fn task(running: CancellationToken) {
     // Give chips time to stop hashing
     tokio::time::sleep(Duration::from_millis(100)).await;
     
-    // Reset board to safe state
-    if let Err(e) = board.reset().await {
-        error!("Failed to reset board during shutdown: {}", e);
+    // Hold chips in reset to ensure they stay in a safe state
+    info!("Holding chips in reset");
+    if let Err(e) = board.hold_in_reset().await {
+        error!("Failed to hold chips in reset during shutdown: {}", e);
     }
     
     info!("Hardware shutdown complete");
