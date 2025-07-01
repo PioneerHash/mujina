@@ -31,10 +31,10 @@ src/
 ├── config.rs         # Configuration loading and validation
 ├── daemon.rs         # Daemon lifecycle management
 ├── board/            # Hash board implementations
-├── board_io/         # Physical connections to boards
-├── board_protocol/   # Board control protocols
-├── chip_io/          # Hardware interface traits (I2C, SPI, GPIO)
-├── misc_chips/       # Peripheral chip drivers
+├── transport/        # Physical transport layer
+├── mgmt_protocol/    # Board management protocols
+├── hw_trait/         # Hardware interface traits (I2C, SPI, GPIO, Serial)
+├── peripheral/       # Peripheral chip drivers
 ├── asic/             # Mining ASIC drivers
 ├── board_manager.rs  # Board lifecycle and hotplug management
 ├── scheduler.rs      # Work scheduling and distribution
@@ -108,10 +108,9 @@ testability.
 │   orchestrates all components for a specific board model     │
 └──────────────────────────────────────────────────────────────┘
                │                               │                
-               │Peripherals                    │ASIC Chain      
                │                               │                
 ┌─────────────────────────────┐ ┌──────────────────────────────┐
-│         Misc Chips          │ │            ASIC              │
+│         Peripheral          │ │            ASICs             │
 │     peripheral drivers      │ │   ┌──────────────────────┐   │
 │ ┌──────┐ ┌───────┐┌───────┐ │ │   │     BM13xx Family    │   │
 │ │ TMP75│ │INA260 ││EMC2101│ │ │   │  ┌──────┐ ┌──────┐   │   │
@@ -120,174 +119,176 @@ testability.
       │        │        │       │   └──────────────────────┘   │
       └────────┼────────┘       └──────────────────────────────┘
                │                           └────┬───┘           
-        ┌─────────────┐                         │               
-        │  Chip I/O   │                         │               
-┌───────└─────────────┘───────┐                 │               
-│    Board Protocol Adapters  │                 │               
-│ ┌────────────┐ ┌──────────┐ │                 │               
-│ │I2c via     │ │Gpio via  │ │                 │               
-│ │bitaxe_raw  │ │bitaxe_raw│ │                 │               
-│ └────┬───────┘ └─────┬────┘ │                 │               
-└─────────────────────────────┘                 │               
-       └───────┬───────┘                        │               
-               │                                │               
-    ┌─────────────────────┐           ┌──────────────────┐      
-    │   Control Channel   │           │   Data Channel   │      
-    │   board protocols   │           │  direct  serial  │      
-    └─────────────────────┘           └──────────────────┘      
-              │                                 │               
-              └────────────────┬────────────────┘               
+               └───────────────┬────────────────┘               
                                │                                
 ┌──────────────────────────────────────────────────────────────┐
-│                         Board I/O                            │
+│            Hardware Abstraction Layer (hw_trait)             │
+│          I2C, SPI, GPIO, Serial trait definitions            │
+└──────────────────────────────────────────────────────────────┘
+                               │                                
+┌──────────────────────────────────────────────────────────────┐
+│              Management Protocols (mgmt_protocol)            │
+│           Implement hw_traits over board protocols           │
+└──────────────────────────────────────────────────────────────┘
+                               │                                
+┌──────────────────────────────────────────────────────────────┐
+│                    Transport Layers                          │
 │              Physical connections to boards                  │
-│    ┌─────────────────────┐       ┌──────────────────────┐    │
-│    │     USB Serial      │       │  PCIe, Ethernet, ... │    │
-│    └─────────────────────┘       └──────────────────────┘    │
+│            USB Serial, PCIe, Ethernet (future)               │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-#### Key Insight: Two Separate Communication Paths
-
-Mining boards typically have two distinct communication paths:
-
-1. **Control Channel** (via control protocol): For board management
-   - Temperature sensors, fan control, power monitoring
-   - Reset lines, LED control
-   - Uses protocols like bitaxe-raw over USB serial
-
-2. **Data Channel** (direct to ASICs): For mining operations
-   - Sending work to ASIC chips
-   - Receiving nonces from ASIC chips
-   - Uses chip-specific protocols (BM13xx, etc.)
-   - Often a separate serial port connected directly to the ASIC chain
-
-#### `board_io/`
+#### `transport/`
 Physical connections to hash boards. This layer handles:
 - USB device discovery and enumeration
 - Hotplug detection and events
 - Opening and configuring serial ports
-- Managing dual-channel devices (control + data channels)
+- Managing dual-channel devices (management + data channels)
 - No protocol knowledge - just raw byte streams
 - Emits `BoardConnected`/`BoardDisconnected` events
 
-#### `board_protocol/`
-Protocol implementations for hash board control channels. This layer:
+#### `mgmt_protocol/`
+Protocol implementations for hash board management. This layer:
 - Implements specific packet formats (e.g., bitaxe-raw's 7-byte header)
 - Provides protocol operations: GPIO control, ADC readings, I2C passthrough
 - Handles command/response sequencing and error checking
 - Translates high-level operations into protocol packets
-- Provides adapters that implement `chip_io` traits over protocols
+- Provides adapters that implement `hw_trait` interfaces over protocols
 
-#### `chip_io/`
+#### `hw_trait/`
 Hardware interface traits and native implementations. This layer:
-- Defines traits like `I2c`, `Gpio`, `Adc` that peripheral drivers use
+- Defines traits like `I2c`, `Spi`, `Gpio`, `Serial` that drivers use
+- Allows the same driver to work with, e.g., Linux I2C or I2C-over-protocol
 - Provides native Linux implementations for local buses
-- Allows the same driver to work with Linux I2C or I2C-over-protocol
 
-#### `misc_chips/`
+#### `peripheral/`
 Reusable drivers for peripheral chips (not mining ASICs). These drivers:
-- Are generic over `chip_io` traits (work with any `I2c` implementation)
+- Are generic over `hw_trait` interfaces (e.g, work with any `I2c` implementation)
 - Can be tested with mock implementations
-- Used on both control boards and hash boards
+- Used on various board types
 
-#### `asic/` (Mining ASIC protocols)
-Mining ASIC communication protocols - the heart of mining operations:
-- Implements protocols for different ASIC families (BM13xx, etc.)
+#### `asic/` (Mining ASIC drivers)
+Mining ASIC drivers - the heart of mining operations:
+- Implements drivers for different ASIC families (BM13xx, etc.)
 - Manages chip initialization, frequency control, and status
-- Communicates directly via the data channel
+- Communicates via hw_trait::Serial (which may be a direct passthrough or
+  tunneled through mgmt_protocol)
+- Handles chip-specific protocols and command sequences
 
-### Example: EmberOne Board Implementation
+### Example: Board Implementation Layering
 
-Here's how these layers work together in practice:
+Here's how the architectural layers compose in practice:
 
 ```rust
-// board/ember_one.rs
-use crate::board_io::UsbSerial;
-use crate::board_protocol::bitaxe_raw::{Protocol, I2c as BitaxeI2c};
-use crate::misc_chips::{TMP75, INA260};
+// board/bitaxe_gamma.rs
+use crate::mgmt_protocol::bitaxe_raw::BitaxeRawProtocol;
+use crate::peripheral::{TMP75, INA260};
 use crate::asic::bm13xx::{BM1370, ChipChain};
+use crate::board::Board;
 
-pub struct EmberOneBoard {
-    transport: UsbSerial,
-    protocol: Protocol,
+pub struct BitaxeGammaBoard {
+    protocol: BitaxeRawProtocol,
     asic_chain: ChipChain<BM1370>,
-    temp_sensor: TMP75<BitaxeI2c>,
-    power_monitor: INA260<BitaxeI2c>,
+    temp_sensor: TMP75<BitaxeRawI2c>,
+    power_monitor: INA260<BitaxeRawI2c>,
 }
 
-impl EmberOneBoard {
-    pub async fn new(control_port: &str, data_port: &str) -> Result<Self> {
-        // 1. Create board I/O layer (dual serial ports)
-        let transport = UsbSerial::open_dual(control_port, data_port)
-            .await
-            .context("Failed to open serial ports")?;
+impl BitaxeGammaBoard {
+    // Each board type knows its exact construction requirements
+    pub async fn new(mgmt_serial: impl Serial, data_serial: impl Serial) -> Result<Self> {
+        // Create protocol handler
+        let mut protocol = BitaxeRawProtocol::new(mgmt_serial);
         
-        // 2. Create board protocol handler for board management
-        let mut protocol = Protocol::new(transport.control_channel());
-        
-        // 3. Initialize the board via control protocol
-        protocol.set_gpio(ASIC_RESET_PIN, false).await?; // Reset ASICs
+        // Initialize hardware via protocol
+        protocol.set_gpio(3, false).await?;  // Reset ASIC (GPIO 3)
         tokio::time::sleep(Duration::from_millis(100)).await;
-        protocol.set_gpio(ASIC_RESET_PIN, true).await?;  // Release reset
+        protocol.set_gpio(3, true).await?;   // Release reset
         
-        // 4. Create ASIC chain on the data channel
-        let asic_chain = ChipChain::<BM1370>::new(
-            transport.data_channel(),
-            1  // Single chip on EmberOne
-        );
-        
-        // 5. Initialize ASICs
+        // Create ASIC chain with single BM1370
+        let mut asic_chain = ChipChain::<BM1370>::new(data_serial);
         asic_chain.enumerate_chips().await?;
-        asic_chain.set_frequency(500.0).await?; // 500 MHz
+        asic_chain.set_frequency(500.0).await?;
         
-        // 6. Create chip_io adapter for board peripherals
-        let i2c = BitaxeI2c::new(&mut protocol);
+        // Create I2C adapter from protocol
+        let i2c = protocol.i2c_adapter();
         
-        // 7. Create drivers for peripheral chips
+        // Create peripheral drivers
         let temp_sensor = TMP75::new(i2c.clone(), 0x48);
         let power_monitor = INA260::new(i2c, 0x40);
         
         Ok(Self {
-            transport,
             protocol,
             asic_chain,
             temp_sensor,
             power_monitor,
         })
     }
-    
-    pub async fn send_work(&mut self, job: MiningJob) -> Result<()> {
-        // Send mining work directly to ASICs via data channel
-        self.asic_chain.send_job(0, job).await
-    }
-    
-    pub async fn check_for_nonces(&mut self) -> Result<Vec<Nonce>> {
-        // Poll ASICs for any found nonces
-        self.asic_chain.read_nonces().await
-    }
-    
-    pub async fn read_diagnostics(&mut self) -> Result<Diagnostics> {
-        // Read from board peripherals via control protocol
-        let temp = self.temp_sensor.read_temperature().await?;
-        let power = self.power_monitor.read_power().await?;
-        let hashrate = self.asic_chain.estimate_hashrate();
-        
-        Ok(Diagnostics { temp, power, hashrate })
-    }
 }
 ```
 
-This architecture has these aims and objectives:
+The board_manager responds to transport discovery events by looking up the
+appropriate board type and constructing it:
 
-1. **Reusability**: Drivers work with any `chip_io` implementation, ASIC protocols work with any serial port
-2. **Testability**: Each layer can be tested in isolation with mocks
-3. **Flexibility**: New boards can mix and match components:
-   - Different ASIC chips (BM1370, BM1397, etc.)
-   - Different board protocols (bitaxe-raw, custom protocols)
-   - Different peripheral chips (various temp sensors, power monitors)
-4. **Maintainability**: Clear boundaries between connections, protocols, and business logic
-5. **Hotplug support**: Handles dynamic board connections
+```rust
+// board_manager.rs - simplified
+async fn handle_transport_connected(&mut self, event: TransportEvent) {
+    // Look up board type in registry based on transport properties
+    let board_type = match &event {
+        TransportEvent::UsbConnected { vid, pid, .. } => {
+            self.board_registry.find_by_usb(*vid, *pid)?
+        }
+        TransportEvent::PcieConnected { device_id, .. } => {
+            self.board_registry.find_by_pcie(*device_id)?
+        }
+    };
+    
+    // Each board type knows how to construct itself from transport
+    let board: Box<dyn Board> = match board_type {
+        BoardType::BitaxeGamma => {
+            // Extract dual serial ports from transport event
+            let (mgmt_port, data_port) = event.into_dual_serial()?;
+            
+            // Board constructor handles all protocol and driver setup
+            Box::new(BitaxeGammaBoard::new(mgmt_port, data_port).await?)
+        }
+        
+        BoardType::S19Pro => {
+            // S19 uses a single multiplexed serial connection
+            let serial = event.into_serial()?;
+            
+            // S19 board handles its own protocol complexity
+            Box::new(S19ProBoard::new(serial).await?)
+        }
+        
+        BoardType::Avalon1366 => {
+            // Some boards might use multiple transports
+            let (control, chain1, chain2, chain3) = event.into_quad_serial()?;
+            
+            Box::new(AvalonBoard::new(control, [chain1, chain2, chain3]).await?)
+        }
+    };
+    
+    // Register board with scheduler
+    self.scheduler.add_board(board);
+}
+```
+
+This architecture achieves several key objectives:
+
+1. **Driver Reusability**: The same peripheral driver (e.g., TMP75 temp sensor) works on:
+   - Different boards (Bitaxe, S19, Avalon)
+   - Different I2C implementations (Linux native, USB-tunneled, protocol-based)
+   - Test environments with mock I2C
+2. **ASIC Driver Portability**: BM13xx drivers work with any Serial implementation:
+   - Direct serial port on development boards
+   - Protocol-multiplexed chains on production miners
+   - Mock serial for testing
+3. **Clean Abstractions**: Drivers depend only on hw_trait interfaces, not specific hardware
+4. **Testability**: Every driver can be tested in isolation with trait mocks
+5. **Composability**: Boards compose existing drivers rather than reimplementing:
+   - Pick the ASIC driver for your chips
+   - Pick the peripheral drivers for your sensors
+   - Wire them together with your board's specific transport
 
 ### Mining Logic
 
@@ -300,14 +301,15 @@ Hash board implementations that compose all hardware elements:
 - Manages: ASIC chains, cooling, power delivery, monitoring
 
 #### `asic/`
-Mining ASIC protocols and implementations:
-- Current: `bm13xx/` family with protocol documentation
+Mining ASIC drivers:
+- Current: `bm13xx/` family driver with protocol documentation
 - Future: Other ASIC families (BM1397, etc.)
 - Handles: work distribution, nonce collection, frequency control
+- Communicates through hw_trait layer for maximum flexibility
 
 #### `board_manager.rs`
 Manages board lifecycle and hotplug events:
-- Listens to `board_io` discovery events
+- Listens to `transport` discovery events
 - Identifies board types (USB VID/PID or probing)
 - Creates/destroys board instances
 - Maintains active board registry
@@ -369,11 +371,11 @@ Mining Pool <--[Stratum]--> pool::PoolClient
           asic::BM13xxChip              asic::BM13xxChip
                     |                             |
                     v                             v
-       board_io::UsbSerial         board_io::UsbSerial
+       transport::UsbSerial        transport::UsbSerial
 
 
 Hotplug Flow:
-USB Device ──> board_io ──> BoardConnected Event ──> board_manager
+USB Device ──> transport ──> BoardConnected Event ──> board_manager
                                                            |
                                                            v
                                                     Creates Board
@@ -401,10 +403,10 @@ The architecture supports extension through several mechanisms:
 1. **New Board Types**: Implement the `Board` trait
 2. **New ASIC Families**: Add modules under `asic/`
 3. **New Pool Protocols**: Implement `PoolClient` trait
-4. **New Board Protocols**: Add under `board_protocol/`
+4. **New Management Protocols**: Add under `mgmt_protocol/`
 5. **Custom Schedulers**: Pluggable scheduling strategies
-6. **Additional Peripheral Chips**: Add drivers to `misc_chips/`
-7. **New Connection Types**: Extend `board_io/` (PCIe, Ethernet)
+6. **Additional Peripheral Chips**: Add drivers to `peripheral/`
+7. **New Connection Types**: Extend `transport/` (PCIe, Ethernet)
 
 ## Configuration
 
