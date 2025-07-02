@@ -14,21 +14,21 @@ pub trait Chip: Send {
     /// This typically includes setting PLL frequency, enabling cores,
     /// configuring version rolling, etc.
     async fn configure(&mut self) -> Result<(), ChipError>;
-    
+
     /// Send a mining job to this chip.
     ///
     /// The chip will begin hashing immediately upon receiving the job.
     async fn send_job(&mut self, job: &MiningJob) -> Result<(), ChipError>;
-    
+
     /// Poll for any nonces found by this chip.
     ///
     /// Returns immediately with any available nonces. Does not block
     /// waiting for nonces to be found.
     async fn poll_nonces(&mut self) -> Result<Vec<NonceResult>, ChipError>;
-    
+
     /// Get chip information
     fn chip_info(&self) -> &ChipInfo;
-    
+
     /// Get current chip statistics
     fn stats(&self) -> ChipStats;
 }
@@ -72,7 +72,7 @@ pub struct MiningJob {
     pub nonce_start: u32,
     /// Nonce range to search
     pub nonce_range: u32,
-    
+
     // Parsed header fields for chips that need them separately
     /// Block version (from header bytes 0-3)
     pub version: u32,
@@ -88,7 +88,13 @@ pub struct MiningJob {
 
 impl MiningJob {
     /// Create a new mining job from a block header
-    pub fn from_header(job_id: u64, header: [u8; 80], target: [u8; 32], nonce_start: u32, nonce_range: u32) -> Self {
+    pub fn from_header(
+        job_id: u64,
+        header: [u8; 80],
+        target: [u8; 32],
+        nonce_start: u32,
+        nonce_range: u32,
+    ) -> Self {
         // Parse header fields
         let version = u32::from_le_bytes(header[0..4].try_into().unwrap());
         let mut prev_block_hash = [0u8; 32];
@@ -97,7 +103,7 @@ impl MiningJob {
         merkle_root.copy_from_slice(&header[36..68]);
         let ntime = u32::from_le_bytes(header[68..72].try_into().unwrap());
         let nbits = u32::from_le_bytes(header[72..76].try_into().unwrap());
-        
+
         Self {
             job_id,
             header,

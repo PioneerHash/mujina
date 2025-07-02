@@ -7,8 +7,13 @@ use tokio::signal::unix::{self, SignalKind};
 use tokio::sync::mpsc;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-use crate::{board::Board, board_manager::BoardManager, scheduler, transport::{TransportEvent, UsbTransport}};
 use crate::tracing::prelude::*;
+use crate::{
+    board::Board,
+    board_manager::BoardManager,
+    scheduler,
+    transport::{TransportEvent, UsbTransport},
+};
 
 /// The main daemon that coordinates all mining operations.
 pub struct Daemon {
@@ -30,7 +35,7 @@ impl Daemon {
         // Create channels for component communication
         let (transport_tx, transport_rx) = mpsc::channel::<TransportEvent>(100);
         let (board_tx, board_rx) = mpsc::channel::<Box<dyn Board + Send>>(10);
-        
+
         // Create and start USB transport discovery
         let usb_transport = UsbTransport::new(transport_tx.clone());
         self.tracker.spawn({
@@ -43,7 +48,7 @@ impl Daemon {
                 shutdown.cancelled().await;
             }
         });
-        
+
         // Create and start board manager
         let mut board_manager = BoardManager::new(transport_rx, board_tx);
         self.tracker.spawn({
@@ -61,9 +66,10 @@ impl Daemon {
                 }
             }
         });
-        
+
         // Start the scheduler with board receiver
-        self.tracker.spawn(scheduler::task(self.shutdown.clone(), board_rx));
+        self.tracker
+            .spawn(scheduler::task(self.shutdown.clone(), board_rx));
         self.tracker.close();
 
         info!("Started.");

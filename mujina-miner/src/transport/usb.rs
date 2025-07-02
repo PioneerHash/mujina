@@ -4,9 +4,9 @@
 //! It provides raw device information without any knowledge of
 //! what the devices are or how they should be configured.
 
-use tokio::sync::mpsc;
 use crate::error::Result;
 use crate::tracing::prelude::*;
+use tokio::sync::mpsc;
 
 /// Information about a discovered USB device.
 #[derive(Debug, Clone)]
@@ -30,11 +30,9 @@ pub struct UsbDeviceInfo {
 pub enum TransportEvent {
     /// A USB device was connected
     UsbDeviceConnected(UsbDeviceInfo),
-    
+
     /// A USB device was disconnected
-    UsbDeviceDisconnected {
-        device_path: String,
-    },
+    UsbDeviceDisconnected { device_path: String },
 }
 
 /// USB transport discovery.
@@ -47,37 +45,38 @@ impl UsbTransport {
     pub fn new(event_tx: mpsc::Sender<super::TransportEvent>) -> Self {
         Self { event_tx }
     }
-    
+
     /// Start discovery task.
     ///
     /// For now, this immediately "discovers" hardcoded devices.
     /// In the future, this will monitor udev events for USB hotplug.
     pub async fn start_discovery(&self) -> Result<()> {
         info!("Starting USB discovery (hardcoded for now)");
-        
+
         // Hardcoded discovery - simulating what real USB enumeration would find
         let device = UsbDeviceInfo {
             vid: 0x0403,
-            pid: 0x6015,  // Matches Bitaxe Gamma registration
+            pid: 0x6015, // Matches Bitaxe Gamma registration
             serial_number: Some("BITAXE001".to_string()),
             device_path: "/sys/bus/usb/devices/1-1.2".to_string(),
-            serial_ports: vec![
-                "/dev/ttyACM0".to_string(),
-                "/dev/ttyACM1".to_string(),
-            ],
+            serial_ports: vec!["/dev/ttyACM0".to_string(), "/dev/ttyACM1".to_string()],
         };
-        
-        info!("Discovered USB device: {:04x}:{:04x} with {} serial ports", 
-              device.vid, device.pid, device.serial_ports.len());
-        
+
+        info!(
+            "Discovered USB device: {:04x}:{:04x} with {} serial ports",
+            device.vid,
+            device.pid,
+            device.serial_ports.len()
+        );
+
         // Emit discovery event wrapped in generic transport event
         let usb_event = TransportEvent::UsbDeviceConnected(device);
         let event = super::TransportEvent::Usb(usb_event);
-        
+
         if let Err(e) = self.event_tx.send(event).await {
             error!("Failed to send transport event: {}", e);
         }
-        
+
         Ok(())
     }
 }

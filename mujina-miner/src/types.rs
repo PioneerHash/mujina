@@ -5,10 +5,8 @@
 //! mining-specific types.
 
 // Re-export frequently used bitcoin types for convenience
-pub use bitcoin::{
-    Amount, BlockHash, Network, Target, Transaction, TxOut, Work,
-};
 pub use bitcoin::block::Header as BlockHeader;
+pub use bitcoin::{Amount, BlockHash, Network, Target, Transaction, TxOut, Work};
 
 use bitcoin::hashes::sha256d;
 

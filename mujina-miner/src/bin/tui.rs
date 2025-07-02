@@ -10,13 +10,13 @@ use anyhow::Result;
 async fn main() -> Result<()> {
     println!("mujina-tui: Terminal UI for mujina-miner");
     println!("This is a placeholder - TUI implementation coming soon!");
-    
+
     // TODO: Implement TUI with ratatui
     // - Dashboard with hashrate graphs
     // - Temperature and power monitoring
     // - Pool status and shares
     // - Board overview
     // - Keyboard navigation
-    
+
     Ok(())
 }

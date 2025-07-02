@@ -8,16 +8,15 @@
 pub mod usb;
 
 // Re-export transport implementations
-pub use usb::{UsbTransport, UsbDeviceInfo};
+pub use usb::{UsbDeviceInfo, UsbTransport};
 
 /// Generic transport event that can represent different transport types.
 #[derive(Debug)]
 pub enum TransportEvent {
     /// USB device event
     Usb(usb::TransportEvent),
-    
     // Future transport types:
-    // /// PCIe device event  
+    // /// PCIe device event
     // Pcie(pcie::TransportEvent),
     //
     // /// Ethernet device event
@@ -25,14 +24,14 @@ pub enum TransportEvent {
 }
 
 /// Common trait for transport discovery (future enhancement).
-/// 
+///
 /// Each transport implementation could implement this trait to provide
 /// a consistent interface for device discovery across different transports.
 #[async_trait::async_trait]
 pub trait TransportDiscovery: Send + Sync {
     /// Start discovering devices on this transport.
     async fn start_discovery(&self) -> crate::error::Result<()>;
-    
+
     /// Stop discovery and clean up resources.
     async fn stop_discovery(&self) -> crate::error::Result<()>;
 }
