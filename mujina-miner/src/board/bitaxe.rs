@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::{
-    io::{AsyncRead, AsyncWriteExt, ReadBuf},
+    io::{AsyncRead, ReadBuf},
     time,
 };
 use tokio_serial::SerialStream;
@@ -14,6 +14,8 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use crate::asic::bm13xx::{self, protocol::Command, BM13xxProtocol};
 use crate::asic::{ChipInfo, MiningJob};
 use crate::board::{Board, BoardError, BoardEvent, BoardInfo, JobCompleteReason};
+use crate::hw_trait::gpio::{Gpio, GpioPin, PinValue};
+use crate::mgmt_protocol::{ControlChannel, BitaxeRawGpio};
 use crate::tracing::prelude::*;
 
 /// A wrapper around AsyncRead that traces raw bytes as they're read
@@ -62,8 +64,10 @@ impl<R: AsyncRead + Unpin> AsyncRead for TracingReader<R> {
 /// The Bitaxe Gamma running bitaxe-raw firmware provides a control interface for managing the
 /// hashboard, including GPIO reset control and board initialization sequences.
 pub struct BitaxeBoard {
-    /// Serial control channel for board management commands
-    control: SerialStream,
+    /// Control channel for board management
+    control_channel: ControlChannel,
+    /// GPIO controller
+    gpio: BitaxeRawGpio,
     /// Writer for sending commands to chips
     data_writer: FramedWrite<tokio::io::WriteHalf<SerialStream>, bm13xx::FrameCodec>,
     /// Reader for receiving responses from chips (moved to event monitor during initialize)
@@ -84,6 +88,9 @@ pub struct BitaxeBoard {
 }
 
 impl BitaxeBoard {
+    /// GPIO pin number for ASIC reset control (active low)
+    const ASIC_RESET_PIN: u8 = 0;
+    
     /// Creates a new BitaxeBoard instance with the provided serial streams.
     ///
     /// # Arguments
@@ -97,15 +104,20 @@ impl BitaxeBoard {
     /// In the future, a DeviceManager will create boards when USB devices
     /// are detected (by VID/PID) and pass already-opened serial streams.
     pub fn new(control: SerialStream, data: SerialStream) -> Self {
-        // Split the data stream immediately
-        let (reader, writer) = tokio::io::split(data);
+        // Create control channel and GPIO controller
+        let control_channel = ControlChannel::new(control);
+        let gpio = BitaxeRawGpio::new(control_channel.clone());
 
-        // Wrap the reader with tracing
-        let tracing_reader = TracingReader::new(reader, "Data");
+        // Split data stream
+        let (data_reader, data_writer) = tokio::io::split(data);
+
+        // Wrap the data reader with tracing
+        let tracing_reader = TracingReader::new(data_reader, "Data");
 
         BitaxeBoard {
-            control,
-            data_writer: FramedWrite::new(writer, bm13xx::FrameCodec::default()),
+            control_channel,
+            gpio,
+            data_writer: FramedWrite::new(data_writer, bm13xx::FrameCodec::default()),
             data_reader: Some(FramedRead::new(
                 tracing_reader,
                 bm13xx::FrameCodec::default(),
@@ -123,52 +135,48 @@ impl BitaxeBoard {
     ///
     /// This function toggles the reset line low for 100ms, then high for 100ms
     /// to properly reset all connected mining chips.
-    ///
-    /// # Hardware Protocol
-    /// - RSTN_LO: Pulls reset line low (active reset)
-    /// - RSTN_HI: Releases reset line high (normal operation)
-    /// - 100ms delays ensure proper reset timing for BM13xx chips
-    ///
-    /// # Errors
-    /// Returns an error if serial communication fails during reset sequence
-    ///
-    /// # TODO
-    /// Replace raw byte commands with proper codec and high-level message types
-    pub async fn momentary_reset(&mut self) -> Result<(), std::io::Error> {
-        const RSTN_LO: &[u8] = &[0x07, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00];
-        const RSTN_HI: &[u8] = &[0x07, 0x00, 0x00, 0x00, 0x06, 0x00, 0x01];
+    pub async fn momentary_reset(&mut self) -> Result<(), BoardError> {
         const WAIT: Duration = Duration::from_millis(100);
 
-        tracing::debug!("Control TX: RSTN_LO => {:02x?}", RSTN_LO);
-        self.control.write_all(RSTN_LO).await?;
-        self.control.flush().await?;
+        // Assert reset
+        self.hold_in_reset().await?;
         time::sleep(WAIT).await;
 
-        tracing::debug!("Control TX: RSTN_HI => {:02x?}", RSTN_HI);
-        self.control.write_all(RSTN_HI).await?;
-        self.control.flush().await?;
+        // De-assert reset
+        self.release_reset().await?;
         time::sleep(WAIT).await;
+
+        Ok(())
+    }
+    
+    /// Release the mining chips from reset state.
+    async fn release_reset(&mut self) -> Result<(), BoardError> {
+        // Get the ASIC reset pin
+        let mut reset_pin = self.gpio.pin(Self::ASIC_RESET_PIN).await
+            .map_err(|e| BoardError::HardwareControl(format!("Failed to get reset pin: {}", e)))?;
+
+        // Set reset high (inactive)
+        tracing::debug!("De-asserting ASIC reset (GPIO {} = high)", Self::ASIC_RESET_PIN);
+        reset_pin.write(PinValue::High).await
+            .map_err(|e| BoardError::HardwareControl(format!("Failed to de-assert reset: {}", e)))?;
 
         Ok(())
     }
 
     /// Hold the mining chips in reset state.
     ///
-    /// This function pulls the reset line low and keeps it there,
+    /// This function sets the reset line low and keeps it there,
     /// effectively disabling all connected mining chips. This is used
     /// during shutdown to ensure chips are in a safe, non-hashing state.
-    ///
-    /// # Hardware Protocol
-    /// - RSTN_LO: Pulls reset line low (active reset)
-    ///
-    /// # Errors
-    /// Returns an error if serial communication fails
-    pub async fn hold_in_reset(&mut self) -> Result<(), std::io::Error> {
-        const RSTN_LO: &[u8] = &[0x07, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00];
+    pub async fn hold_in_reset(&mut self) -> Result<(), BoardError> {
+        // Get the ASIC reset pin
+        let mut reset_pin = self.gpio.pin(Self::ASIC_RESET_PIN).await
+            .map_err(|e| BoardError::HardwareControl(format!("Failed to get reset pin: {}", e)))?;
 
-        tracing::debug!("Control TX: RSTN_LO (holding in reset) => {:02x?}", RSTN_LO);
-        self.control.write_all(RSTN_LO).await?;
-        self.control.flush().await?;
+        // Hold reset low (active)
+        tracing::debug!("Holding ASIC in reset (GPIO {} = low)", Self::ASIC_RESET_PIN);
+        reset_pin.write(PinValue::Low).await
+            .map_err(|e| BoardError::HardwareControl(format!("Failed to hold reset: {}", e)))?;
 
         Ok(())
     }
@@ -440,35 +448,23 @@ impl Board for BitaxeBoard {
     }
 
     async fn send_job(&mut self, job: &MiningJob) -> Result<(), BoardError> {
-        // Encode the job for BM1370
-        let command = self.protocol.encode_mining_job(job, self.next_job_id);
-
-        tracing::debug!(
-            "Sending job {} (internal ID {}) to chips - target: {:02x?}, ntime: {}, nbits: {:08x}",
-            job.job_id,
-            self.next_job_id,
-            &job.target[..8],
-            job.ntime,
-            job.nbits
+        // TODO: Job sending is temporarily disabled until peripheral support is complete
+        // This prevents sending work to chips before fan control and temperature monitoring
+        // are implemented, which could cause thermal issues.
+        
+        tracing::info!(
+            "Job {} received but not sent to chips (job sending disabled until peripherals implemented)",
+            job.job_id
         );
-
-        // Send the job to all chips (BM1370 uses broadcast for jobs)
-        self.data_writer
-            .send(command)
-            .await
-            .map_err(|e| BoardError::Communication(e))?;
-
-        tracing::debug!("Job {} sent successfully", job.job_id);
-
-        // Store current job ID mapping
+        
+        // Store current job ID mapping for future use
         self.current_job_id = Some(job.job_id);
-
-        // Increment job ID counter (cycles through 0-127 by steps of 24)
+        
+        // Increment job ID counter to maintain consistency
         self.next_job_id = (self.next_job_id + 24) % 128;
-
-        // Spawn a job completion timer
-        self.spawn_job_timer(Some(job.job_id));
-
+        
+        // Don't spawn job timer since we're not actually mining
+        
         Ok(())
     }
 
