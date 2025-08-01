@@ -170,55 +170,56 @@ impl<I2C: I2c> Tps546<I2C> {
     pub async fn init(&mut self) -> Result<()> {
         info!("Initializing TPS546D24A power regulator");
 
-        // First just try to read the status to see if device is responsive
-        match self.read_word(pmbus::STATUS_WORD).await {
-            Ok(status) => info!("TPS546 STATUS_WORD: 0x{:04X}", status),
-            Err(e) => {
-                error!("Failed to read TPS546 status: {}", e);
-                return Err(e);
-            }
-        }
-
-        // Turn off output during configuration
+        // First verify device ID to ensure I2C communication is working
+        self.verify_device_id().await?;
+        
+        // Turn off output during configuration (esp-miner does this first)
         self.write_byte(pmbus::OPERATION, OPERATION_OFF).await?;
-        debug!("Power output turned off");
+        info!("Power output turned off");
 
-        // Clear any existing faults before configuring
-        self.clear_faults().await?;
-
-        // Configure ON_OFF_CONFIG
+        // Configure ON_OFF_CONFIG immediately after turning off (esp-miner sequence)
         let on_off_config = ON_OFF_CONFIG_DELAY
             | ON_OFF_CONFIG_POLARITY
             | ON_OFF_CONFIG_CP
             | ON_OFF_CONFIG_CMD
             | ON_OFF_CONFIG_PU;
         self.write_byte(pmbus::ON_OFF_CONFIG, on_off_config).await?;
-        debug!("ON_OFF_CONFIG set to 0x{:02X}", on_off_config);
+        info!("ON_OFF_CONFIG set to 0x{:02X}", on_off_config);
 
-        // Read VOUT_MODE to verify data format
+        // Read VOUT_MODE to verify data format (esp-miner does this)
         let vout_mode = self.read_byte(pmbus::VOUT_MODE).await?;
-        debug!("VOUT_MODE: 0x{:02X}", vout_mode);
+        info!("VOUT_MODE: 0x{:02X}", vout_mode);
         
-        // For now, skip full configuration and just set the output voltage
-        // self.write_config().await?;
+        // Write entire configuration like esp-miner does
+        self.write_config().await?;
         
-        info!("TPS546D24A initialization complete (minimal config)");
+        // Read back STATUS_WORD for verification like esp-miner does
+        let status = self.read_word(pmbus::STATUS_WORD).await?;
+        info!("STATUS_WORD after config: 0x{:04X}", status);
+        
+        // Log current readings like esp-miner does
+        self.log_initial_readings().await?;
+        
+        info!("TPS546D24A initialization complete");
         Ok(())
     }
 
     /// Write all configuration parameters
     async fn write_config(&mut self) -> Result<()> {
-        info!("Writing TPS546 configuration");
+        info!("---Writing new config values to TPS546---");
 
         // Phase configuration
+        info!("Setting PHASE: 00");
         self.write_byte(pmbus::PHASE, 0x00).await?;
 
         // Switching frequency (650 kHz)
+        info!("Setting FREQUENCY: 650MHz");
         self.write_word(pmbus::FREQUENCY_SWITCH, self.int_to_slinear11(650))
             .await?;
 
-        // Input voltage thresholds
+        // Input voltage thresholds (handle UV_WARN_LIMIT bug like esp-miner)
         if self.config.vin_uv_warn_limit > 0.0 {
+            info!("Setting VIN_UV_WARN_LIMIT: {:.2}V", self.config.vin_uv_warn_limit);
             self.write_word(
                 pmbus::VIN_UV_WARN_LIMIT,
                 self.float_to_slinear11(self.config.vin_uv_warn_limit),
@@ -226,13 +227,18 @@ impl<I2C: I2c> Tps546<I2C> {
             .await?;
         }
 
+        info!("Setting VIN_ON: {:.2}V", self.config.vin_on);
         self.write_word(pmbus::VIN_ON, self.float_to_slinear11(self.config.vin_on))
             .await?;
+            
+        info!("Setting VIN_OFF: {:.2}V", self.config.vin_off);
         self.write_word(
             pmbus::VIN_OFF,
             self.float_to_slinear11(self.config.vin_off),
         )
         .await?;
+        
+        info!("Setting VIN_OV_FAULT_LIMIT: {:.2}V", self.config.vin_ov_fault_limit);
         self.write_word(
             pmbus::VIN_OV_FAULT_LIMIT,
             self.float_to_slinear11(self.config.vin_ov_fault_limit),
@@ -241,49 +247,72 @@ impl<I2C: I2c> Tps546<I2C> {
 
         // VIN_OV_FAULT_RESPONSE
         const VIN_OV_FAULT_RESPONSE: u8 = 0xB7;
+        info!("Setting VIN_OV_FAULT_RESPONSE: {:02X}", VIN_OV_FAULT_RESPONSE);
         self.write_byte(pmbus::VIN_OV_FAULT_RESPONSE, VIN_OV_FAULT_RESPONSE)
             .await?;
 
         // Output voltage configuration
+        info!("Setting VOUT SCALE: {:.2}", self.config.vout_scale_loop);
         self.write_word(
             pmbus::VOUT_SCALE_LOOP,
             self.float_to_slinear11(self.config.vout_scale_loop),
         )
         .await?;
         
+        info!("Setting VOUT_COMMAND: {:.2}V", self.config.vout_command);
         let vout_command = self.float_to_ulinear16(self.config.vout_command).await?;
         self.write_word(pmbus::VOUT_COMMAND, vout_command).await?;
         
+        info!("Setting VOUT_MAX: {:.2}V", self.config.vout_max);
         let vout_max = self.float_to_ulinear16(self.config.vout_max).await?;
         self.write_word(pmbus::VOUT_MAX, vout_max).await?;
         
+        info!("Setting VOUT_MIN: {:.2}V", self.config.vout_min);
         let vout_min = self.float_to_ulinear16(self.config.vout_min).await?;
         self.write_word(pmbus::VOUT_MIN, vout_min).await?;
 
         // Output voltage protection
         const VOUT_OV_FAULT_LIMIT: f32 = 1.25; // 125% of VOUT_COMMAND
         const VOUT_OV_WARN_LIMIT: f32 = 1.16; // 116% of VOUT_COMMAND
+        const VOUT_MARGIN_HIGH: f32 = 1.10; // 110% of VOUT_COMMAND  
+        const VOUT_MARGIN_LOW: f32 = 0.90; // 90% of VOUT_COMMAND
         const VOUT_UV_WARN_LIMIT: f32 = 0.90; // 90% of VOUT_COMMAND
         const VOUT_UV_FAULT_LIMIT: f32 = 0.75; // 75% of VOUT_COMMAND
 
+        info!("Setting VOUT_OV_FAULT_LIMIT: {:.2}", VOUT_OV_FAULT_LIMIT);
         let vout_ov_fault = self.float_to_ulinear16(VOUT_OV_FAULT_LIMIT).await?;
         self.write_word(pmbus::VOUT_OV_FAULT_LIMIT, vout_ov_fault).await?;
         
+        info!("Setting VOUT_OV_WARN_LIMIT: {:.2}", VOUT_OV_WARN_LIMIT);
         let vout_ov_warn = self.float_to_ulinear16(VOUT_OV_WARN_LIMIT).await?;
         self.write_word(pmbus::VOUT_OV_WARN_LIMIT, vout_ov_warn).await?;
         
+        info!("Setting VOUT_MARGIN_HIGH: {:.2}", VOUT_MARGIN_HIGH);
+        let vout_margin_high = self.float_to_ulinear16(VOUT_MARGIN_HIGH).await?;
+        self.write_word(pmbus::VOUT_MARGIN_HIGH, vout_margin_high).await?;
+        
+        info!("Setting VOUT_MARGIN_LOW: {:.2}", VOUT_MARGIN_LOW);
+        let vout_margin_low = self.float_to_ulinear16(VOUT_MARGIN_LOW).await?;
+        self.write_word(pmbus::VOUT_MARGIN_LOW, vout_margin_low).await?;
+        
+        info!("Setting VOUT_UV_WARN_LIMIT: {:.2}", VOUT_UV_WARN_LIMIT);
         let vout_uv_warn = self.float_to_ulinear16(VOUT_UV_WARN_LIMIT).await?;
         self.write_word(pmbus::VOUT_UV_WARN_LIMIT, vout_uv_warn).await?;
         
+        info!("Setting VOUT_UV_FAULT_LIMIT: {:.2}", VOUT_UV_FAULT_LIMIT);
         let vout_uv_fault = self.float_to_ulinear16(VOUT_UV_FAULT_LIMIT).await?;
         self.write_word(pmbus::VOUT_UV_FAULT_LIMIT, vout_uv_fault).await?;
 
         // Output current protection
+        info!("----- IOUT");
+        info!("Setting IOUT_OC_WARN_LIMIT: {:.2}A", self.config.iout_oc_warn_limit);
         self.write_word(
             pmbus::IOUT_OC_WARN_LIMIT,
             self.float_to_slinear11(self.config.iout_oc_warn_limit),
         )
         .await?;
+        
+        info!("Setting IOUT_OC_FAULT_LIMIT: {:.2}A", self.config.iout_oc_fault_limit);
         self.write_word(
             pmbus::IOUT_OC_FAULT_LIMIT,
             self.float_to_slinear11(self.config.iout_oc_fault_limit),
@@ -292,22 +321,28 @@ impl<I2C: I2c> Tps546<I2C> {
 
         // IOUT_OC_FAULT_RESPONSE
         const IOUT_OC_FAULT_RESPONSE: u8 = 0xC0; // Shutdown immediately, no retries
+        info!("Setting IOUT_OC_FAULT_RESPONSE: {:02x}", IOUT_OC_FAULT_RESPONSE);
         self.write_byte(pmbus::IOUT_OC_FAULT_RESPONSE, IOUT_OC_FAULT_RESPONSE)
             .await?;
 
         // Temperature protection
+        info!("----- TEMPERATURE");
         const OT_WARN_LIMIT: i32 = 105; // °C
         const OT_FAULT_LIMIT: i32 = 145; // °C
         const OT_FAULT_RESPONSE: u8 = 0xFF; // Wait for cooling and retry
 
+        info!("Setting OT_WARN_LIMIT: {}C", OT_WARN_LIMIT);
         self.write_word(pmbus::OT_WARN_LIMIT, self.int_to_slinear11(OT_WARN_LIMIT))
             .await?;
+        info!("Setting OT_FAULT_LIMIT: {}C", OT_FAULT_LIMIT);
         self.write_word(pmbus::OT_FAULT_LIMIT, self.int_to_slinear11(OT_FAULT_LIMIT))
             .await?;
+        info!("Setting OT_FAULT_RESPONSE: {:02x}", OT_FAULT_RESPONSE);
         self.write_byte(pmbus::OT_FAULT_RESPONSE, OT_FAULT_RESPONSE)
             .await?;
 
         // Timing configuration
+        info!("----- TIMING");
         const TON_DELAY: i32 = 0;
         const TON_RISE: i32 = 3;
         const TON_MAX_FAULT_LIMIT: i32 = 0;
@@ -315,23 +350,30 @@ impl<I2C: I2c> Tps546<I2C> {
         const TOFF_DELAY: i32 = 0;
         const TOFF_FALL: i32 = 0;
 
+        info!("Setting TON_DELAY: {}ms", TON_DELAY);
         self.write_word(pmbus::TON_DELAY, self.int_to_slinear11(TON_DELAY))
             .await?;
+        info!("Setting TON_RISE: {}ms", TON_RISE);
         self.write_word(pmbus::TON_RISE, self.int_to_slinear11(TON_RISE))
             .await?;
+        info!("Setting TON_MAX_FAULT_LIMIT: {}ms", TON_MAX_FAULT_LIMIT);
         self.write_word(
             pmbus::TON_MAX_FAULT_LIMIT,
             self.int_to_slinear11(TON_MAX_FAULT_LIMIT),
         )
         .await?;
+        info!("Setting TON_MAX_FAULT_RESPONSE: {:02x}", TON_MAX_FAULT_RESPONSE);
         self.write_byte(pmbus::TON_MAX_FAULT_RESPONSE, TON_MAX_FAULT_RESPONSE)
             .await?;
+        info!("Setting TOFF_DELAY: {}ms", TOFF_DELAY);
         self.write_word(pmbus::TOFF_DELAY, self.int_to_slinear11(TOFF_DELAY))
             .await?;
+        info!("Setting TOFF_FALL: {}ms", TOFF_FALL);
         self.write_word(pmbus::TOFF_FALL, self.int_to_slinear11(TOFF_FALL))
             .await?;
 
         // Pin detect override
+        info!("Setting PIN_DETECT_OVERRIDE");
         const PIN_DETECT_OVERRIDE: u16 = 0xFFFF;
         self.write_word(pmbus::PIN_DETECT_OVERRIDE, PIN_DETECT_OVERRIDE)
             .await?;
@@ -359,6 +401,42 @@ impl<I2C: I2c> Tps546<I2C> {
             bail!(Tps546Error::DeviceIdMismatch);
         }
 
+        Ok(())
+    }
+
+    /// Log initial readings like esp-miner does for verification
+    async fn log_initial_readings(&mut self) -> Result<()> {
+        info!("-----------VOLTAGE/CURRENT---------------------");
+        
+        // Read input voltage
+        match self.read_word(pmbus::READ_VIN).await {
+            Ok(value) => {
+                let vin = self.slinear11_to_float(value);
+                info!("read READ_VIN: {:.2}V", vin);
+            }
+            Err(e) => warn!("Failed to read VIN: {}", e),
+        }
+        
+        // Read output current
+        match self.read_word(pmbus::READ_IOUT).await {
+            Ok(value) => {
+                let iout = self.slinear11_to_float(value);
+                info!("read READ_IOUT: {:.2}A", iout);
+            }
+            Err(e) => warn!("Failed to read IOUT: {}", e),
+        }
+        
+        // Read output voltage
+        match self.read_word(pmbus::READ_VOUT).await {
+            Ok(value) => {
+                match self.ulinear16_to_float(value).await {
+                    Ok(vout) => info!("read READ_VOUT: {:.2}V", vout),
+                    Err(e) => warn!("Failed to convert VOUT: {}", e),
+                }
+            }
+            Err(e) => warn!("Failed to read VOUT: {}", e),
+        }
+        
         Ok(())
     }
 
@@ -540,14 +618,21 @@ impl<I2C: I2c> Tps546<I2C> {
             return 0;
         }
 
-        // For negative exponents (small positive values)
+        if value < 0.0 {
+            error!("No negative numbers supported for SLINEAR11");
+            return 0;
+        }
+
+        // Find the right exponent (negative for small values)
         for i in 0..=15 {
-            let mantissa = (value * 2.0_f32.powi(i)) as i32;
-            if mantissa < 1024 {
-                let exponent = i;
+            let mantissa = (value * 2.0_f32.powi(i as i32)) as i32;
+            if mantissa >= 1024 {
+                let exponent = (i as i32) - 1;
+                let final_mantissa = (value * 2.0_f32.powi(exponent)) as i32;
+                
                 // Encode negative exponent in two's complement
-                let exp_bits = ((((!exponent) + 1) & 0x1F) as u16) << 11;
-                return exp_bits | (mantissa as u16 & 0x03FF);
+                let result = (((!exponent + 1) << 11) & 0xF800) | (final_mantissa & 0x03FF);
+                return result as u16;
             }
         }
 
