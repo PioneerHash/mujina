@@ -188,24 +188,38 @@ impl JobGenerator {
         }
     }
 
-    /// Create a header for test mode
+    /// Create a header for test mode using real pool data
     fn create_test_header(&mut self) -> BlockHeader {
-        // Create deterministic but unique hashes for testing
-        let mut prev_blockhash_bytes = [0u8; 32];
-        let height_bytes = self.block_height.to_be_bytes();
-        prev_blockhash_bytes[0..4].copy_from_slice(&height_bytes);
-        prev_blockhash_bytes[4..8].copy_from_slice(b"TEST");
+        // Real block data from pool capture (job ID: 875880a from esp-miner logs)
+        // This should produce valid nonces since it's from actual mining work
+        let prev_blockhash_bytes = [
+            0x3a, 0x3c, 0x8e, 0xa0, 0xe8, 0x3a, 0xc0, 0x1f,
+            0x75, 0x98, 0x8d, 0xe3, 0xfa, 0x28, 0x52, 0xae,
+            0xfe, 0xe2, 0x90, 0x65, 0x00, 0x01, 0xbd, 0x05,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
 
-        let mut merkle_root_bytes = [0u8; 32];
-        merkle_root_bytes[0..6].copy_from_slice(b"MUJINA");
-        merkle_root_bytes[6..10].copy_from_slice(&self.job_id_counter.to_be_bytes()[4..8]);
+        // Merkle root from real pool data
+        let merkle_root_bytes = [
+            0x9c, 0xb5, 0x3d, 0x58, 0x19, 0xf4, 0xb7, 0xe6,
+            0x29, 0xb1, 0xf7, 0xac, 0x4a, 0x87, 0x2c, 0x14,
+            0x71, 0x64, 0x4f, 0x8e, 0xbd, 0x97, 0x18, 0x2a,
+            0x4d, 0x00, 0x29, 0x0d, 0x72, 0x63, 0xd4, 0x87,
+        ];
+
+        // Use easier difficulty than the original pool job (0x17023a04)
+        // to increase chances of finding nonces at our test frequency
+        let test_bits = CompactTarget::from_consensus(0x1d00ffff); // Difficulty 1
+
+        // Use original time but increment slightly for each job
+        let time = 0x68546858 + self.job_id_counter as u32;
 
         BlockHeader {
-            version: bitcoin::blockdata::block::Version::from_consensus(self.version),
+            version: bitcoin::blockdata::block::Version::from_consensus(0x20000000),
             prev_blockhash: BlockHash::from_byte_array(prev_blockhash_bytes),
             merkle_root: TxMerkleNode::from_byte_array(merkle_root_bytes),
-            time: self.base_time,
-            bits: self.target.to_compact_lossy(),
+            time,
+            bits: test_bits,
             nonce: 0,
         }
     }
