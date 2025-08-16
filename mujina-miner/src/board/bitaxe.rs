@@ -631,6 +631,18 @@ impl Board for BitaxeBoard {
 
         tracing::info!("Board initialized with {} chip(s)", self.chip_infos.len());
         
+        // Verify we found the expected BM1370 chip
+        if let Some(first_chip) = self.chip_infos.first() {
+            if first_chip.chip_id != Self::EXPECTED_CHIP_ID {
+                return Err(BoardError::InitializationFailed(format!(
+                    "Wrong chip type for Bitaxe Gamma: expected BM1370 ({:02x}{:02x}), found {:02x}{:02x}",
+                    Self::EXPECTED_CHIP_ID[0], Self::EXPECTED_CHIP_ID[1],
+                    first_chip.chip_id[0], first_chip.chip_id[1]
+                )));
+            }
+            tracing::debug!("Found expected BM1370 chip");
+        }
+        
         // BM1370 requires additional initialization after chip discovery
         if self.chip_infos.len() > 0 {
             // Send core register control commands
