@@ -418,12 +418,6 @@ impl BitaxeBoard {
 
     /// Initialize the power controller
     async fn init_power_controller(&mut self) -> Result<(), BoardError> {
-        // Set I2C frequency to 100kHz for PMBus devices
-        self.i2c.set_frequency(100_000).await
-            .map_err(|e| BoardError::InitializationFailed(
-                format!("Failed to set I2C frequency: {}", e)
-            ))?;
-
         // Clone the I2C bus for the power controller
         let power_i2c = self.i2c.clone();
         let config = Tps546Config::bitaxe_gamma();
@@ -615,6 +609,12 @@ impl Board for BitaxeBoard {
         // Phase 1: Initialize power controller FIRST (before chip communication)
         // This ensures stable core voltage before chip configuration
         tracing::info!("Initializing power management");
+
+        // Set I2C bus frequency to 100kHz for all devices
+        self.i2c.set_frequency(100_000).await
+            .map_err(|e| BoardError::InitializationFailed(
+                format!("Failed to set I2C frequency: {}", e)
+            ))?;
 
         // Initialize fan controller first to test I2C
         self.init_fan_controller().await?;
