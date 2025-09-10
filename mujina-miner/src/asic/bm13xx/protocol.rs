@@ -22,21 +22,25 @@ pub struct Frequency {
 
 impl Frequency {
     /// Minimum supported frequency in MHz
+    #[allow(dead_code)]
     pub const MIN_MHZ: f32 = 50.0;
     /// Maximum supported frequency in MHz  
+    #[allow(dead_code)]
     pub const MAX_MHZ: f32 = 800.0;
     /// Base crystal frequency in MHz
     const CRYSTAL_MHZ: f32 = 25.0;
     
     /// Create frequency from MHz value with validation
+    #[allow(dead_code)]
     pub fn from_mhz(mhz: f32) -> Result<Self, ProtocolError> {
-        if mhz < Self::MIN_MHZ || mhz > Self::MAX_MHZ {
+        if !(Self::MIN_MHZ..=Self::MAX_MHZ).contains(&mhz) {
             return Err(ProtocolError::InvalidFrequency { mhz: mhz as u32 });
         }
         Ok(Self { mhz })
     }
     
     /// Get frequency in MHz
+    #[allow(dead_code)]
     pub fn mhz(&self) -> f32 {
         self.mhz
     }
@@ -63,7 +67,7 @@ impl Frequency {
                                 / Self::CRYSTAL_MHZ;
                         let fb_div = fb_div_f.round() as u16;
 
-                        if fb_div >= 0xa0 && fb_div <= 0xef {
+                        if (0xa0..=0xef).contains(&fb_div) {
                             // Calculate actual frequency with these settings
                             let actual_freq = Self::CRYSTAL_MHZ * fb_div as f32
                                 / (ref_div as f32 * post_div1 as f32 * post_div2 as f32);
@@ -379,7 +383,7 @@ pub enum RegisterAddress {
     MiscControl = 0x18,
     UartBaud = 0x28,
     UartRelay = 0x2C,
-    CoreRegister = 0x3C,
+    Core = 0x3C,
     AnalogMux = 0x54,
     IoDriverStrength = 0x58,
     Pll3Parameter = 0x68,
@@ -405,7 +409,7 @@ pub enum Register {
     UartRelay {
         raw_value: u32, // Domain relay configuration (complex format)
     },
-    CoreRegister {
+    Core {
         raw_value: u32,
     },
     AnalogMux {
@@ -448,13 +452,13 @@ impl Register {
                 Register::UartBaud(baud)
             }
             RegisterAddress::UartRelay => Register::UartRelay { raw_value },
-            RegisterAddress::CoreRegister => Register::CoreRegister { raw_value },
+            RegisterAddress::Core => Register::Core { raw_value },
             RegisterAddress::AnalogMux => Register::AnalogMux { raw_value },
             RegisterAddress::IoDriverStrength => {
                 // Parse driver strength from raw value
                 let mut strengths = [0u8; 8];
-                for i in 0..8 {
-                    strengths[i] = ((raw_value >> (i * 4)) & 0xf) as u8;
+                for (i, strength) in strengths.iter_mut().enumerate() {
+                    *strength = ((raw_value >> (i * 4)) & 0xf) as u8;
                 }
                 Register::IoDriverStrength(IoDriverStrength { strengths })
             }
@@ -479,7 +483,7 @@ impl Register {
             Register::MiscControl { .. } => RegisterAddress::MiscControl,
             Register::UartBaud(_) => RegisterAddress::UartBaud,
             Register::UartRelay { .. } => RegisterAddress::UartRelay,
-            Register::CoreRegister { .. } => RegisterAddress::CoreRegister,
+            Register::Core { .. } => RegisterAddress::Core,
             Register::AnalogMux { .. } => RegisterAddress::AnalogMux,
             Register::IoDriverStrength(_) => RegisterAddress::IoDriverStrength,
             Register::Pll3Parameter { .. } => RegisterAddress::Pll3Parameter,
@@ -517,7 +521,7 @@ impl Register {
                 let bytes: [u8; 4] = (*baud).into();
                 dst.put_slice(&bytes);
             }
-            Register::CoreRegister { raw_value } => {
+            Register::Core { raw_value } => {
                 // Core register needs big-endian encoding
                 dst.put_u32(*raw_value);
             }
@@ -1396,12 +1400,12 @@ mod command_tests {
     #[test]
     fn write_core_register_sequence() {
         // From Bitaxe capture: TX: 55 AA 51 09 00 3C 80 00 8B 00 12
-        // CoreRegister uses big-endian encoding
+        // Core register uses big-endian encoding
         assert_frame_eq(
             Command::WriteRegister {
                 all: true,
                 chip_address: 0x00,
-                register: Register::CoreRegister {
+                register: Register::Core {
                     raw_value: 0x80008B00,  // Big-endian: produces bytes 80 00 8B 00
                 },
             },
@@ -2011,7 +2015,8 @@ impl BM13xxProtocol {
         const CORE_REG_INIT_2: u32 = 0x0c800080;
         const ADDRESS_INCREMENT: u8 = 2;
 
-        let mut commands = Vec::new();
+        // Pre-allocate for efficiency (rough estimate of commands)
+        let mut commands = Vec::with_capacity(10 + chain_length);
 
         // Step 1: Enable version rolling on all chips (broadcast)
         commands.push(self.broadcast_write(Register::VersionMask(VersionMask::full_rolling())));
@@ -2038,10 +2043,10 @@ impl BM13xxProtocol {
         }
 
         // Step 6: Configure core registers on all chips
-        commands.push(self.broadcast_write(Register::CoreRegister {
+        commands.push(self.broadcast_write(Register::Core {
             raw_value: CORE_REG_INIT_1,
         }));
-        commands.push(self.broadcast_write(Register::CoreRegister {
+        commands.push(self.broadcast_write(Register::Core {
             raw_value: CORE_REG_INIT_2,
         }));
 
@@ -2068,7 +2073,7 @@ impl BM13xxProtocol {
         const ADDRESS_INCREMENT: u8 = 2;
 
         let mut commands = Vec::new();
-        let num_domains = (chain_length + chips_per_domain - 1) / chips_per_domain;
+        let num_domains = chain_length.div_ceil(chips_per_domain);
 
         // Configure IO driver strength at domain boundaries
         for domain in 0..num_domains {
@@ -2152,7 +2157,7 @@ impl BM13xxProtocol {
     /// Generate frequency ramping sequence for gradual clock increase.
     ///
     /// This prevents power spikes and thermal stress during startup.
-    #[expect(dead_code, reason = "Will be used for safe frequency ramping on startup")]
+    #[allow(dead_code)]
     pub fn frequency_ramp(
         &self,
         start: Frequency,
@@ -2274,12 +2279,12 @@ impl BM13xxProtocol {
             RegisterAddress::MiscControl => Register::MiscControl { raw_value: value },
             RegisterAddress::UartBaud => Register::UartBaud(BaudRate::Custom(value)),
             RegisterAddress::UartRelay => Register::UartRelay { raw_value: value },
-            RegisterAddress::CoreRegister => Register::CoreRegister { raw_value: value },
+            RegisterAddress::Core => Register::Core { raw_value: value },
             RegisterAddress::AnalogMux => Register::AnalogMux { raw_value: value },
             RegisterAddress::IoDriverStrength => {
                 let mut strengths = [0u8; 8];
-                for i in 0..8 {
-                    strengths[i] = ((value >> (i * 4)) & 0xf) as u8;
+                for (i, strength) in strengths.iter_mut().enumerate() {
+                    *strength = ((value >> (i * 4)) & 0xf) as u8;
                 }
                 Register::IoDriverStrength(IoDriverStrength { strengths })
             }

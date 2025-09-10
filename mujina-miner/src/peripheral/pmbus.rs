@@ -222,7 +222,7 @@ impl Linear11 {
             let mantissa_f = value / 2.0_f32.powi(exp as i32);
 
             // Check if mantissa fits in 11-bit two's complement (-1024 to 1023)
-            if mantissa_f >= -1024.0 && mantissa_f < 1024.0 {
+            if (-1024.0..1024.0).contains(&mantissa_f) {
                 let mantissa = mantissa_f.round() as i32;
                 let reconstructed = mantissa as f32 * 2.0_f32.powi(exp as i32);
                 let error = (reconstructed - value).abs();
@@ -437,7 +437,7 @@ impl StatusDecoder {
             0xFF => "infinite retries, wait for recovery".to_string(),
             _ => {
                 if retry_count == 0 || response_type == 0b010 || response_type == 0b101 {
-                    format!("{}", response_desc)
+                    response_desc.to_string()
                 } else {
                     format!("{}, {}, {} delay", response_desc, retries_desc, delay_desc)
                 }

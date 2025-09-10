@@ -180,6 +180,9 @@ impl From<ChipError> for BoardError {
 /// Helper type for async board factory functions
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// Type alias for board factory function
+pub type BoardFactoryFn = fn(UsbDeviceInfo) -> BoxFuture<'static, crate::error::Result<Box<dyn Board + Send>>>;
+
 /// Board descriptor that gets collected by inventory.
 ///
 /// Board implementors use `inventory::submit!` to register their board type
@@ -193,8 +196,7 @@ pub struct BoardDescriptor {
     /// Human-readable board name (e.g., "Bitaxe Gamma")
     pub name: &'static str,
     /// Factory function to create the board from USB device info
-    pub create_fn:
-        fn(UsbDeviceInfo) -> BoxFuture<'static, crate::error::Result<Box<dyn Board + Send>>>,
+    pub create_fn: BoardFactoryFn,
 }
 
 // This creates the inventory collection for board descriptors

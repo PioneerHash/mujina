@@ -220,7 +220,7 @@ impl BitaxeBoard {
         self.data_writer
             .send(command)
             .await
-            .map_err(|e| BoardError::Communication(e))
+            .map_err(BoardError::Communication)
     }
 
     /// Send multiple configuration commands in sequence.
@@ -246,7 +246,7 @@ impl BitaxeBoard {
         self.data_writer
             .send(discover_cmd)
             .await
-            .map_err(|e| BoardError::Communication(e))?;
+            .map_err(BoardError::Communication)?;
 
         // Wait a bit for responses
         let timeout = Duration::from_millis(500);
@@ -564,7 +564,7 @@ impl BitaxeBoard {
                         let fb_div = fb_div_f.round() as u16;
                         
                         // Check if fb_div is in valid range
-                        if fb_div >= 0xa0 && fb_div <= 0xef {
+                        if (0xa0..=0xef).contains(&fb_div) {
                             // Calculate actual frequency with this configuration
                             let actual_freq = CRYSTAL_FREQ * fb_div as f32 / (ref_div * post_div1 * post_div2) as f32;
                             let error = (actual_freq - target_freq).abs();
@@ -862,7 +862,7 @@ impl Board for BitaxeBoard {
         let core_reg_cmd1 = Command::WriteRegister {
             all: true,
             chip_address: 0x00,
-            register: bm13xx::protocol::Register::CoreRegister {
+            register: bm13xx::protocol::Register::Core {
                 raw_value: 0x8000_8B00,  // Big-endian encoding
             },
         };
@@ -872,7 +872,7 @@ impl Board for BitaxeBoard {
         let core_reg_cmd2 = Command::WriteRegister {
             all: true,
             chip_address: 0x00,
-            register: bm13xx::protocol::Register::CoreRegister {
+            register: bm13xx::protocol::Register::Core {
                 raw_value: 0x8000_800C,  // Big-endian encoding
             },
         };
@@ -925,7 +925,7 @@ impl Board for BitaxeBoard {
         let core_reg_specific1 = Command::WriteRegister {
             all: false,
             chip_address: 0x00,
-            register: bm13xx::protocol::Register::CoreRegister {
+            register: bm13xx::protocol::Register::Core {
                 raw_value: 0x8000_8B00,  // Big-endian
             },
         };
@@ -935,7 +935,7 @@ impl Board for BitaxeBoard {
         let core_reg_specific2 = Command::WriteRegister {
             all: false,
             chip_address: 0x00,
-            register: bm13xx::protocol::Register::CoreRegister {
+            register: bm13xx::protocol::Register::Core {
                 raw_value: 0x8000_800C,  // Big-endian
             },
         };
@@ -945,7 +945,7 @@ impl Board for BitaxeBoard {
         let core_reg_specific3 = Command::WriteRegister {
             all: false,
             chip_address: 0x00,
-            register: bm13xx::protocol::Register::CoreRegister {
+            register: bm13xx::protocol::Register::Core {
                 raw_value: 0x8000_82AA,  // Big-endian encoding
             },
         };
@@ -988,7 +988,7 @@ impl Board for BitaxeBoard {
         let core_reg_final = Command::WriteRegister {
             all: true,
             chip_address: 0x00,
-            register: bm13xx::protocol::Register::CoreRegister {
+            register: bm13xx::protocol::Register::Core {
                 raw_value: 0x8000_8DEE,  // Big-endian encoding
             },
         };
@@ -1109,7 +1109,7 @@ impl Board for BitaxeBoard {
         self.data_writer
             .send(command)
             .await
-            .map_err(|e| BoardError::Communication(e))?;
+            .map_err(BoardError::Communication)?;
 
         // Update job tracking
         self.current_job_id = Some(job.job_id);
