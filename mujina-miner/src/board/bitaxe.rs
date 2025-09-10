@@ -502,6 +502,9 @@ impl BitaxeBoard {
         // Clone what we need for the task
         let i2c = self.i2c.clone();
         let chip_count = self.chip_infos.len();
+        
+        // Clone event channel for reporting critical faults
+        let event_tx = self.event_tx.clone();
 
         let handle = tokio::spawn(async move {
             const STATS_INTERVAL: Duration = Duration::from_secs(30);
@@ -576,9 +579,32 @@ impl BitaxeBoard {
                     Err(_) => "N/A".to_string(),
                 };
 
-                // Check power status
+                // Check power status - critical faults will return error
                 if let Err(e) = power.check_status().await {
-                    warn!("Power controller status check failed: {}", e);
+                    // Log the critical fault
+                    error!("CRITICAL: Power controller fault detected: {}", e);
+                    
+                    // Send BoardFault event
+                    if let Some(ref tx) = event_tx {
+                        let fault_event = BoardEvent::BoardFault {
+                            component: "power_controller".to_string(),
+                            fault: e.to_string(),
+                            recoverable: false,  // Power faults are critical
+                        };
+                        if let Err(send_err) = tx.send(fault_event).await {
+                            error!("Failed to send board fault event: {}", send_err);
+                        }
+                    }
+                    
+                    // Try to clear the fault once  
+                    warn!("Attempting to clear power controller faults...");
+                    if let Err(clear_err) = power.clear_faults().await {
+                        error!("Failed to clear faults: {}", clear_err);
+                    }
+                    
+                    // Continue monitoring - let scheduler decide what to do
+                    // Don't exit the task, just skip this iteration
+                    continue;
                 }
 
                 info!(

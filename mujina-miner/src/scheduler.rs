@@ -143,6 +143,19 @@ pub async fn task(running: CancellationToken, mut board_rx: mpsc::Receiver<Box<d
                         trace!("Chip {} status - temp: {:?}°C, freq: {:?}MHz",
                                chip_address, temperature_c, frequency_mhz);
                     }
+                    BoardEvent::BoardFault { component, fault, recoverable } => {
+                        error!("Board fault in {}: {}", component, fault);
+                        
+                        if !recoverable {
+                            error!("Non-recoverable board fault detected - shutting down board");
+                            // Cancel all active jobs
+                            active_jobs.clear();
+                            // Signal shutdown
+                            running.cancel();
+                        } else {
+                            warn!("Recoverable fault - attempting to continue operation");
+                        }
+                    }
                 }
             }
 
