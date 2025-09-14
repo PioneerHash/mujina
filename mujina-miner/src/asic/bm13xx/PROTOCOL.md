@@ -78,9 +78,11 @@ Special cases:
 - **chip_id in responses**: The 2-byte chip_id field that appears in all read 
 register responses should be treated as a fixed byte sequence `[0x13, 0x70]` 
 rather than as an integer value
-- **Hash values** (merkle_root, prev_block_hash): These are byte arrays that 
+- **Hash values** (merkle_root, prev_block_hash): These are byte arrays that
 should be transmitted as-is without endianness conversion
 - **Single bytes**: No endianness applies (job_id, midstate_num, etc.)
+- **CRC16 in work frames**: Unlike other 16-bit values, CRC16 in work frames
+is stored in big-endian format (MSB first)
 
 ## Command Types
 
@@ -155,11 +157,12 @@ components. This format is used by the chips mujina-miner supports.
 | 0x55 0xAA | 0x21 | Length | Job_Data | CRC16 |
 ```
 - **Preamble**: `0x55 0xAA` (2 bytes)
-- **Type/Flags**: `0x21` = TYPE=1 (work), BROADCAST=0, CMD=1
+- **Type/Flags**: `0x21` = TYPE=0 (work), BROADCAST=0, CMD=1
 - **Length**: `0x56` (86 decimal) = 82 bytes job_data + 2 bytes CRC16 + 2 bytes 
 for type/length
 - **Job_Data**: 82 bytes of mining work (see below)
-- **CRC16**: 16-bit CRC calculated over type/flags + length + job_data
+- **CRC16**: 16-bit CRC calculated over type/flags + length + job_data, stored in
+big-endian format (MSB first)
 
 **Job_Data Structure (82 bytes):**
 ```
