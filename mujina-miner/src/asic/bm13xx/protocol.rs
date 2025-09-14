@@ -9,7 +9,7 @@ use std::{fmt, io};
 use strum::FromRepr;
 use tokio_util::codec::{Decoder, Encoder};
 
-use super::crc::{crc16, crc5, crc5_is_valid};
+use super::crc::{crc16, crc16_is_valid, crc5, crc5_is_valid};
 use super::error::ProtocolError;
 use crate::asic::{ChipError, MiningJob};
 use crate::tracing::prelude::*;
@@ -815,9 +815,6 @@ impl Command {
         let type_flags = data[2];
         let _length = data[3] as usize;
 
-        // Validate CRC5 (skip preamble, include CRC for validation)
-        let crc_valid = crc5_is_valid(&data[2..]);
-
         // Parse type flags
         // Based on protocol examples:
         // 0x40=reg/specific, 0x41=reg/specific, 0x51=reg/broadcast, 0x21=work/specific
@@ -826,6 +823,25 @@ impl Command {
         let is_work = (type_flags & 0x40) == 0;
         let is_broadcast = (type_flags & 0x10) != 0;
         let cmd = type_flags & 0x1f;
+
+        // Validate CRC based on frame type
+        let crc_valid = if is_work {
+            // Work frames use CRC16 on the last 2 bytes
+            if data.len() >= 4 {
+                let payload_end = data.len() - 2;
+                let crc_bytes = &data[payload_end..];
+                let payload = &data[2..payload_end];
+                // CRC16 in work frames is stored in big-endian format
+                let expected_crc = u16::from_be_bytes([crc_bytes[0], crc_bytes[1]]);
+                let calculated_crc = crc16(payload);
+                calculated_crc == expected_crc
+            } else {
+                false
+            }
+        } else {
+            // Register frames use CRC5 (skip preamble, include CRC for validation)
+            crc5_is_valid(&data[2..])
+        };
 
         if is_work {
             // Parse work frame
