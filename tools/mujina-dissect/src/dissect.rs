@@ -9,8 +9,8 @@
 use crate::i2c::I2cOperation;
 use crate::serial::{Direction, SerialFrame};
 use colored::Colorize;
-use mujina_miner::asic::bm13xx::crc::{crc16_is_valid, crc5_is_valid};
-use mujina_miner::asic::bm13xx::protocol::{Command, Response};
+use mujina_miner::asic::bm13xx::crc::crc5_is_valid;
+use mujina_miner::asic::bm13xx::protocol::Command;
 use mujina_miner::peripheral::{emc2101, tps546};
 use std::fmt;
 
@@ -28,7 +28,6 @@ pub struct DissectedFrame {
 #[derive(Debug)]
 pub enum FrameContent {
     Command(Command),
-    Response(Response),
     Unknown(String),
     Invalid(String),
 }
