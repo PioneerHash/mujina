@@ -31,7 +31,6 @@ impl From<Channel> for Direction {
 pub struct SerialFrame {
     pub direction: Direction,
     pub start_time: f64,
-    pub end_time: f64,
     pub data: Vec<u8>,
     pub has_errors: bool,
 }
@@ -171,7 +170,6 @@ impl FrameAssembler {
                     let frame = SerialFrame {
                         direction: self.direction,
                         start_time: *start_time,
-                        end_time: timestamp,
                         data: data.clone(),
                         has_errors: has_error,
                     };
@@ -193,7 +191,6 @@ impl FrameAssembler {
                 let frame = SerialFrame {
                     direction: self.direction,
                     start_time: *start_time,
-                    end_time: self.last_event_time,
                     data: data.clone(),
                     has_errors: true,
                 };

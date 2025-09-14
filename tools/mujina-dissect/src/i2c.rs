@@ -7,11 +7,9 @@ use std::collections::VecDeque;
 #[derive(Debug, Clone)]
 pub struct I2cTransaction {
     pub start_time: f64,
-    pub end_time: f64,
     pub address: u8,
     pub is_read: bool,
     pub data: Vec<u8>,
-    pub success: bool,
 }
 
 /// I2C transaction assembly state
@@ -93,11 +91,9 @@ impl I2cAssembler {
                     // Transaction complete
                     self.transactions.push_back(I2cTransaction {
                         start_time: *start_time,
-                        end_time: event.timestamp,
                         address: *address,
                         is_read: *is_read,
                         data: data.clone(),
-                        success: *all_acks,
                     });
                     self.state = I2cState::Idle;
                 }
@@ -106,11 +102,9 @@ impl I2cAssembler {
                     if !data.is_empty() {
                         self.transactions.push_back(I2cTransaction {
                             start_time: *start_time,
-                            end_time: event.timestamp,
                             address: *address,
                             is_read: *is_read,
                             data: data.clone(),
-                            success: *all_acks,
                         });
                     }
                     // Start new transaction
@@ -142,11 +136,9 @@ impl I2cAssembler {
             if !data.is_empty() {
                 self.transactions.push_back(I2cTransaction {
                     start_time: *start_time,
-                    end_time: *start_time, // Use start time since we don't have end
                     address: *address,
                     is_read: *is_read,
                     data: data.clone(),
-                    success: false, // Mark as unsuccessful since incomplete
                 });
             }
         }
@@ -158,7 +150,6 @@ impl I2cAssembler {
 #[derive(Debug, Clone)]
 pub struct I2cOperation {
     pub start_time: f64,
-    pub end_time: f64,
     pub address: u8,
     pub register: Option<u8>,
     pub write_data: Option<Vec<u8>>,
@@ -180,7 +171,6 @@ pub fn group_transactions(transactions: &[I2cTransaction]) -> Vec<I2cOperation> 
                 // Register read pattern: write register address, then read data
                 operations.push(I2cOperation {
                     start_time: t1.start_time,
-                    end_time: t2.end_time,
                     address: t1.address,
                     register: Some(t1.data[0]),
                     write_data: if t1.data.len() > 1 {
@@ -198,7 +188,6 @@ pub fn group_transactions(transactions: &[I2cTransaction]) -> Vec<I2cOperation> 
         // Single transaction
         operations.push(I2cOperation {
             start_time: t1.start_time,
-            end_time: t1.end_time,
             address: t1.address,
             register: if !t1.data.is_empty() {
                 Some(t1.data[0])

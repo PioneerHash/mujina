@@ -572,10 +572,6 @@ enum CommandFlagsCmd {
 }
 
 #[derive(Debug)]
-#[expect(
-    dead_code,
-    reason = "JobMidstate variant will be used for BM1397 support"
-)]
 pub enum Command {
     /// Set address for a chip in the chain
     SetChipAddress { chip_address: u8 },
@@ -2148,10 +2144,6 @@ impl BM13xxProtocol {
     /// 1. Set PLL parameters for desired frequency
     /// 2. Enable version rolling if supported
     /// 3. Configure other chip-specific settings
-    #[expect(
-        dead_code,
-        reason = "Will be used when we implement frequency configuration"
-    )]
     pub fn single_chip_init(&self, frequency: Frequency) -> Vec<Command> {
         let mut commands = Vec::new();
 
@@ -2356,10 +2348,6 @@ impl BM13xxProtocol {
     }
 
     /// Decode a response into a mining result.
-    #[expect(
-        dead_code,
-        reason = "Will be used for nonce verification when pool is connected"
-    )]
     pub fn decode_response(
         &self,
         response: Response,
@@ -2400,7 +2388,6 @@ impl BM13xxProtocol {
     }
 
     /// Create a command to read a register.
-    #[expect(dead_code, reason = "Will be used for chip diagnostics and monitoring")]
     pub fn read_register(&self, chip_address: u8, register: RegisterAddress) -> Command {
         Command::ReadRegister {
             all: false,
@@ -2410,7 +2397,6 @@ impl BM13xxProtocol {
     }
 
     /// Set UART baud rate on all chips
-    #[expect(dead_code, reason = "Will be used for baud rate negotiation")]
     pub fn set_baudrate(&self, baudrate: BaudRate) -> Command {
         Command::WriteRegister {
             all: true,
@@ -2422,7 +2408,6 @@ impl BM13xxProtocol {
     /// Create a command to write a register.
     ///
     /// Note: This is a placeholder - actual register encoding depends on the register type
-    #[expect(dead_code, reason = "Will be used for chip configuration")]
     pub fn write_register(
         &self,
         chip_address: u8,
@@ -2483,7 +2468,6 @@ impl BM13xxProtocol {
 }
 
 /// Results from protocol operations
-#[expect(dead_code, reason = "Will be used when pool connection is implemented")]
 pub enum MiningResult {
     /// A register was read
     RegisterRead(Register),
