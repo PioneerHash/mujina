@@ -11,8 +11,8 @@ name = "mujina-dissect"
 path = "src/main.rs"
 
 [dependencies]
-# We'll implement our own protocol decoding for now
-# mujina-miner = { path = "../../mujina-miner" }
+# Core miner library for protocol definitions
+mujina-miner = { path = "../../mujina-miner" }
 
 # CLI and utilities
 clap = { version = "4", features = ["derive"] }

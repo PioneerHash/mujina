@@ -84,24 +84,17 @@ impl FrameAssembler {
 
     /// Process a single byte
     fn process_byte(&mut self, byte: u8, timestamp: f64, has_error: bool) -> Option<SerialFrame> {
-        println!(
-            "DEBUG: {:?} processing byte 0x{:02x} at {:.6} (error: {})",
-            self.direction, byte, timestamp, has_error
-        );
-
         match &mut self.state {
             AssemblyState::Idle => {
                 // Look for preamble start
                 match self.direction {
                     Direction::HostToChip => {
                         if byte == 0x55 {
-                            println!("DEBUG: Found first preamble byte for HostToChip");
                             self.state = AssemblyState::FoundFirst(timestamp);
                         }
                     }
                     Direction::ChipToHost => {
                         if byte == 0xAA {
-                            println!("DEBUG: Found first preamble byte for ChipToHost");
                             self.state = AssemblyState::FoundFirst(timestamp);
                         }
                     }
@@ -116,7 +109,6 @@ impl FrameAssembler {
                 };
 
                 if valid {
-                    println!("DEBUG: Found complete preamble, starting frame collection");
                     // Start collecting frame
                     self.state = AssemblyState::Collecting {
                         start_time: *start_time,
@@ -131,7 +123,6 @@ impl FrameAssembler {
                     };
                     None
                 } else {
-                    println!("DEBUG: Invalid preamble sequence, going back to idle");
                     // Not a valid preamble, go back to idle
                     self.state = AssemblyState::Idle;
                     // Reprocess this byte in idle state
@@ -150,10 +141,6 @@ impl FrameAssembler {
                     && data.len() == 4
                     && expected_len.is_none()
                 {
-                    println!(
-                        "DEBUG: Setting expected length to {} for command frame",
-                        byte
-                    );
                     *expected_len = Some(byte as usize);
                 }
 
@@ -161,8 +148,10 @@ impl FrameAssembler {
                 let complete = match self.direction {
                     Direction::HostToChip => {
                         // Command frame: check against expected length
+                        // Length field is from type byte to end (includes CRC, excludes preamble)
+                        // Total frame = 2 (preamble) + length
                         if let Some(len) = expected_len {
-                            data.len() >= *len
+                            data.len() >= 2 + *len
                         } else {
                             false
                         }
@@ -178,11 +167,6 @@ impl FrameAssembler {
                 };
 
                 if complete {
-                    println!(
-                        "DEBUG: Frame complete! Length: {}, data: {:02x?}",
-                        data.len(),
-                        data
-                    );
                     let frame = SerialFrame {
                         direction: self.direction,
                         start_time: *start_time,
@@ -193,11 +177,6 @@ impl FrameAssembler {
                     self.state = AssemblyState::Idle;
                     Some(frame)
                 } else {
-                    println!(
-                        "DEBUG: Frame not complete yet, length: {}, expected: {:?}",
-                        data.len(),
-                        expected_len
-                    );
                     None
                 }
             }
@@ -253,11 +232,6 @@ impl MultiChannelAssembler {
         };
 
         if let Some(frame) = assembler.process(event) {
-            println!(
-                "DEBUG: Assembled frame from {:?}: {} bytes",
-                event.channel,
-                frame.data.len()
-            );
             self.frames.push_back(frame);
         }
     }

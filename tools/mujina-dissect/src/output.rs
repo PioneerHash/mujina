@@ -35,8 +35,9 @@ pub fn format_serial_frame(frame: &DissectedFrame, config: &OutputConfig) -> Str
     };
 
     let content_str = match &frame.content {
-        FrameContent::Command(cmd) => format!("{}", cmd),
-        FrameContent::Response(resp) => format!("{}", resp),
+        FrameContent::Command(cmd) => format!("{:?}", cmd), // Use Debug for now since we added Display to main lib
+        FrameContent::Response(resp) => format!("{:?}", resp),
+        FrameContent::Unknown(msg) => msg.clone(),
         FrameContent::Invalid(msg) => {
             if config.use_color {
                 format!("{}", msg.red())

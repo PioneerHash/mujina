@@ -142,15 +142,7 @@ fn main() -> Result<()> {
     i2c_assembler.flush();
 
     // Deduplicate frames at frame level
-    println!(
-        "DEBUG: Got {} candidate frames before deduplication",
-        candidate_frames.len()
-    );
     let deduplicated_frames = deduplicate_frames(candidate_frames);
-    println!(
-        "DEBUG: Got {} frames after deduplication",
-        deduplicated_frames.len()
-    );
 
     // Collect serial frames
     if args.protocol == "all" || args.protocol == "bm13xx" {
