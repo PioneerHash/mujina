@@ -6,6 +6,11 @@ authors = ["Ryan Kuester <rkuester@insymbols.com>"]
 license = "GPL-3.0-or-later"
 description = "Protocol dissector for Saleae Logic 2 captures of Bitcoin mining hardware"
 
+# TODO: Reconsider the name and crate structure of mujina-dissect
+# - Name could be more descriptive (mujina-protocol-analyzer, mujina-capture-analyzer)
+# - Consider splitting into library crate for dissection logic + binary for CLI tool
+# - Evaluate if this should be a separate workspace member or integrated differently
+
 [[bin]]
 name = "mujina-dissect"
 path = "src/main.rs"
