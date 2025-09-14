@@ -17,11 +17,11 @@
 
 use bitvec::prelude::*;
 use bytes::{Buf, BufMut, BytesMut};
-use std::{fmt, io};
+use std::io;
 use strum::FromRepr;
 use tokio_util::codec::{Decoder, Encoder};
 
-use super::crc::{crc16, crc16_is_valid, crc5, crc5_is_valid};
+use super::crc::{crc16, crc5, crc5_is_valid};
 use super::error::ProtocolError;
 use crate::asic::{ChipError, MiningJob};
 use crate::tracing::prelude::*;
