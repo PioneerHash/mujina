@@ -112,6 +112,18 @@ pub mod protocol {
                 PmbusCommand::ReadVout => {
                     decode_linear16_voltage_with_context(data, context.vout_mode)
                 }
+                // Linear16 VOUT configuration reads (use VOUT_MODE context if available)
+                PmbusCommand::VoutCommand
+                | PmbusCommand::VoutMax
+                | PmbusCommand::VoutMin
+                | PmbusCommand::VoutMarginHigh
+                | PmbusCommand::VoutMarginLow
+                | PmbusCommand::VoutOvFaultLimit
+                | PmbusCommand::VoutOvWarnLimit
+                | PmbusCommand::VoutUvWarnLimit
+                | PmbusCommand::VoutUvFaultLimit => {
+                    decode_linear16_voltage_with_context(data, context.vout_mode)
+                }
                 _ => decode_read_value(cmd, data),
             }
         } else {
@@ -202,6 +214,19 @@ pub mod protocol {
 
                 // Linear16 format readings (requires VOUT_MODE context)
                 PmbusCommand::ReadVout => decode_linear16_voltage(data),
+
+                // Linear16 VOUT configuration reads (context-aware)
+                PmbusCommand::VoutCommand
+                | PmbusCommand::VoutMax
+                | PmbusCommand::VoutMin
+                | PmbusCommand::VoutMarginHigh
+                | PmbusCommand::VoutMarginLow
+                | PmbusCommand::VoutOvFaultLimit
+                | PmbusCommand::VoutOvWarnLimit
+                | PmbusCommand::VoutUvWarnLimit
+                | PmbusCommand::VoutUvFaultLimit => {
+                    decode_linear16_voltage(data) // Will use context in context-aware path
+                }
 
                 // Single byte values
                 PmbusCommand::Page => decode_page(data),
