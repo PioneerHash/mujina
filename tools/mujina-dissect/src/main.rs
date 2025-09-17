@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use capture::{BaudRate, CaptureEvent, CaptureReader, Channel};
 use clap::Parser;
 use dissect::{dissect_i2c_operation_with_context, dissect_serial_frame, I2cContexts};
-use i2c::{group_transactions, I2cAssembler};
+use i2c::{group_pmbus_transactions, group_transactions, I2cAssembler};
 use output::{OutputConfig, OutputEvent};
 use serial::{Direction, FrameAssembler, SerialFrame};
 use std::path::PathBuf;
@@ -41,6 +41,10 @@ struct Args {
     /// Output file (default: stdout)
     #[arg(short = 'o', long)]
     output: Option<PathBuf>,
+
+    /// Force color output even when not connected to a TTY
+    #[arg(long)]
+    force_color: bool,
 
     /// Disable colored output
     #[arg(long)]
@@ -73,8 +77,15 @@ fn main() -> Result<()> {
         show_raw_hex: args.hex,
         use_relative_time: !args.absolute_time,
         start_time: None,
-        use_color: !args.no_color && atty::is(atty::Stream::Stdout),
+        use_color: args.force_color || (!args.no_color && atty::is(atty::Stream::Stdout)),
     };
+
+    // Force colored output if requested
+    if args.force_color {
+        colored::control::set_override(true);
+    } else if args.no_color {
+        colored::control::set_override(false);
+    }
 
     // Setup assemblers - one for each baud rate per channel
     let mut ci_115k_assembler = FrameAssembler::new(Direction::HostToChip);
@@ -160,7 +171,25 @@ fn main() -> Result<()> {
         }
 
         // Group transactions into operations with context tracking
-        let operations = group_transactions(&transactions);
+        // Use PMBus-aware grouping for known PMBus devices, generic grouping for others
+        let (pmbus_transactions, other_transactions): (Vec<_>, Vec<_>) =
+            transactions.into_iter().partition(|t| t.address == 0x24); // TPS546 address
+
+        let mut operations = Vec::new();
+
+        // Process PMBus transactions with PMBus-aware grouping
+        if !pmbus_transactions.is_empty() {
+            operations.extend(group_pmbus_transactions(&pmbus_transactions));
+        }
+
+        // Process other transactions with generic grouping
+        if !other_transactions.is_empty() {
+            operations.extend(group_transactions(&other_transactions));
+        }
+
+        // Sort operations by timestamp
+        operations.sort_by(|a, b| a.start_time.partial_cmp(&b.start_time).unwrap());
+
         let mut i2c_contexts = I2cContexts::default();
         for op in operations {
             let dissected = dissect_i2c_operation_with_context(&op, &mut i2c_contexts);

@@ -165,18 +165,11 @@ pub fn dissect_i2c_operation_with_context(
     let operation = if let Some(reg) = op.register {
         let is_read = op.read_data.is_some();
 
-        // For write operations, skip the first byte (command) to get actual data
-        // For read operations, use all data
+        // Get data directly - PMBus parser already separated command from data
         let data = if is_read {
             op.read_data.as_ref().map(|v| v.as_slice())
         } else {
-            op.write_data.as_ref().and_then(|v| {
-                if v.len() > 1 {
-                    Some(&v[1..]) // Skip command byte
-                } else {
-                    None // Command-only write
-                }
-            })
+            op.write_data.as_ref().map(|v| v.as_slice())
         };
 
         match device {

@@ -89,7 +89,17 @@ pub mod protocol {
                 let decoded = decode_write_value_with_context(cmd, data, context);
                 format!("WRITE {}={}", cmd_name, decoded)
             } else {
-                format!("WRITE CMD[0x{:02x}]", cmd)
+                // Data-less command - only use generic description for truly data-less commands
+                if let Some(command) = PmbusCommand::from_u8(cmd) {
+                    match command {
+                        PmbusCommand::ClearFaults => {
+                            format!("WRITE {} (clears all fault status bits)", cmd_name)
+                        }
+                        _ => format!("WRITE {} (register select)", cmd_name),
+                    }
+                } else {
+                    format!("WRITE CMD[0x{:02x}] (unknown command)", cmd)
+                }
             }
         }
     }
@@ -183,6 +193,7 @@ pub mod protocol {
                 PmbusCommand::ReadVout => decode_linear16_voltage(data),
 
                 // Single byte values
+                PmbusCommand::Page => decode_page(data),
                 PmbusCommand::Operation => decode_operation_mode(data),
                 PmbusCommand::OnOffConfig => decode_on_off_config(data),
                 PmbusCommand::VoutMode => decode_vout_mode(data),
@@ -212,6 +223,20 @@ pub mod protocol {
         if let Some(command) = PmbusCommand::from_u8(cmd) {
             match command {
                 // Single byte commands
+                PmbusCommand::Page => {
+                    if data.len() >= 1 {
+                        let page = data[0];
+                        let desc = match page {
+                            0x00 => "page 0",
+                            0xFF => "all pages (multicast)",
+                            p => return format!("{:02x?} (page {})", data, p),
+                        };
+                        format!("{:02x?} ({})", data, desc)
+                    } else {
+                        format!("{:02x?}", data)
+                    }
+                }
+
                 PmbusCommand::Operation => {
                     if data.len() >= 1 {
                         let op = data[0];
@@ -522,6 +547,20 @@ pub mod protocol {
                 exponent
             };
             format!("0x{:02x} (Linear16, exp={})", mode, exp_signed)
+        } else {
+            format!("{:02x?}", data)
+        }
+    }
+
+    /// Decode PAGE register (PMBus page selection)
+    fn decode_page(data: &[u8]) -> String {
+        if data.len() >= 1 {
+            let page = data[0];
+            match page {
+                0x00 => format!("0x{:02x} (page 0)", page),
+                0xFF => format!("0x{:02x} (all pages - multicast)", page),
+                p => format!("0x{:02x} (page {})", page, p),
+            }
         } else {
             format!("{:02x?}", data)
         }

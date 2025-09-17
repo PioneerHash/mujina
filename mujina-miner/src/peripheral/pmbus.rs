@@ -12,6 +12,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum PmbusCommand {
+    Page = 0x00,
     Operation = 0x01,
     OnOffConfig = 0x02,
     ClearFaults = 0x03,
@@ -83,6 +84,7 @@ impl PmbusCommand {
     /// Get the command name as a string
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Page => "PAGE",
             Self::Operation => "OPERATION",
             Self::OnOffConfig => "ON_OFF_CONFIG",
             Self::ClearFaults => "CLEAR_FAULTS",
@@ -150,6 +152,7 @@ impl PmbusCommand {
     /// Convert from u8 command code to enum variant
     pub fn from_u8(value: u8) -> Option<Self> {
         match value {
+            0x00 => Some(Self::Page),
             0x01 => Some(Self::Operation),
             0x02 => Some(Self::OnOffConfig),
             0x03 => Some(Self::ClearFaults),
@@ -238,6 +241,7 @@ impl std::str::FromStr for PmbusCommand {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_uppercase().as_str() {
+            "PAGE" => Ok(Self::Page),
             "OPERATION" => Ok(Self::Operation),
             "ON_OFF_CONFIG" => Ok(Self::OnOffConfig),
             "CLEAR_FAULTS" => Ok(Self::ClearFaults),
@@ -315,6 +319,7 @@ pub fn command_name(cmd: u8) -> &'static str {
 pub mod commands {
     use super::PmbusCommand;
 
+    pub const PAGE: u8 = PmbusCommand::Page as u8;
     pub const OPERATION: u8 = PmbusCommand::Operation as u8;
     pub const ON_OFF_CONFIG: u8 = PmbusCommand::OnOffConfig as u8;
     pub const CLEAR_FAULTS: u8 = PmbusCommand::ClearFaults as u8;
