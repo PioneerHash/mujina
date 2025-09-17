@@ -135,6 +135,25 @@ pub mod protocol {
                                 "Unknown"
                             }
                         ),
+                        regs::CONVERSION_RATE => {
+                            let rate_desc = match data[0] {
+                                0x00 => "1/16 Hz",
+                                0x01 => "1/8 Hz",
+                                0x02 => "1/4 Hz",
+                                0x03 => "1/2 Hz",
+                                0x04 => "1 Hz",
+                                0x05 => "2 Hz",
+                                0x06 => "4 Hz",
+                                0x07 => "8 Hz",
+                                0x08 => "16 Hz",
+                                0x09 => "32 Hz",
+                                _ => "unknown",
+                            };
+                            format!("0x{:02x} ({})", data[0], rate_desc)
+                        },
+                        regs::INTERNAL_TEMP_LIMIT => {
+                            format!("0x{:02x} ({}°C)", data[0], data[0] as i8)
+                        },
                         _ => format!("0x{:02x}", data[0]),
                     };
                     format!("⟶ READ {}={}", reg_name, decoded)

@@ -189,6 +189,16 @@ pub mod protocol {
                 PmbusCommand::ReadIout => decode_linear11_current(data),
                 PmbusCommand::ReadTemperature1 => decode_linear11_temperature(data),
 
+                // Linear11 voltage configuration reads
+                PmbusCommand::VinOn
+                | PmbusCommand::VinOff
+                | PmbusCommand::VinOvFaultLimit
+                | PmbusCommand::VinUvWarnLimit => decode_linear11_voltage(data),
+
+                // Linear11 current configuration reads
+                PmbusCommand::IoutOcWarnLimit
+                | PmbusCommand::IoutOcFaultLimit => decode_linear11_current(data),
+
                 // Linear16 format readings (requires VOUT_MODE context)
                 PmbusCommand::ReadVout => decode_linear16_voltage(data),
 
@@ -301,15 +311,19 @@ pub mod protocol {
 
                 PmbusCommand::Phase => decode_phase(data),
 
-                // Two-byte Linear11 values (voltages, currents, frequencies)
+                // Voltage values (Linear11 format)
                 PmbusCommand::VinOn
                 | PmbusCommand::VinOff
                 | PmbusCommand::VinOvFaultLimit
-                | PmbusCommand::VinUvWarnLimit
-                | PmbusCommand::IoutOcWarnLimit
-                | PmbusCommand::IoutOcFaultLimit
-                | PmbusCommand::OtWarnLimit
-                | PmbusCommand::OtFaultLimit => decode_write_linear11(data),
+                | PmbusCommand::VinUvWarnLimit => decode_write_linear11_voltage(data),
+
+                // Current values (Linear11 format)
+                PmbusCommand::IoutOcWarnLimit
+                | PmbusCommand::IoutOcFaultLimit => decode_write_linear11_current(data),
+
+                // Temperature values (Linear11 format)
+                PmbusCommand::OtWarnLimit
+                | PmbusCommand::OtFaultLimit => decode_write_linear11(data), // TODO: Add temperature units
 
                 // Frequency in kHz (Linear11 format)
                 PmbusCommand::FrequencySwitch => decode_write_frequency(data),
@@ -635,6 +649,28 @@ pub mod protocol {
             let value = u16::from_le_bytes([data[0], data[1]]);
             let time_ms = pmbus::Linear11::to_int(value);
             format!("{:02x?} ({}ms)", data, time_ms)
+        } else {
+            format!("{:02x?}", data)
+        }
+    }
+
+    /// Decode Linear11 voltage value
+    fn decode_write_linear11_voltage(data: &[u8]) -> String {
+        if data.len() >= 2 {
+            let value = u16::from_le_bytes([data[0], data[1]]);
+            let decoded = pmbus::Linear11::to_float(value);
+            format!("{:02x?} ({:.3}V)", data, decoded)
+        } else {
+            format!("{:02x?}", data)
+        }
+    }
+
+    /// Decode Linear11 current value
+    fn decode_write_linear11_current(data: &[u8]) -> String {
+        if data.len() >= 2 {
+            let value = u16::from_le_bytes([data[0], data[1]]);
+            let decoded = pmbus::Linear11::to_float(value);
+            format!("{:02x?} ({:.3}A)", data, decoded)
         } else {
             format!("{:02x?}", data)
         }
