@@ -518,6 +518,23 @@ impl Linear11 {
         mantissa as f32 * 2.0_f32.powi(exponent)
     }
 
+    /// Convert ULINEAR11 format to floating point (unsigned mantissa)
+    pub fn to_float_unsigned(value: u16) -> f32 {
+        // Extract 5-bit exponent (bits 15-11) as two's complement
+        let exp_raw = ((value >> 11) & 0x1F) as i8;
+        let exponent = if exp_raw & 0x10 != 0 {
+            // Sign extend for negative exponent
+            (exp_raw as u8 | 0xE0) as i8 as i32
+        } else {
+            exp_raw as i32
+        };
+
+        // Extract 11-bit mantissa (bits 10-0) as unsigned
+        let mantissa = (value & 0x7FF) as u32;
+
+        mantissa as f32 * 2.0_f32.powi(exponent)
+    }
+
     /// Convert SLINEAR11 format to integer
     pub fn to_int(value: u16) -> i32 {
         Self::to_float(value) as i32

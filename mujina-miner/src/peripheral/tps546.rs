@@ -521,7 +521,7 @@ pub mod protocol {
     fn decode_linear11_voltage(data: &[u8]) -> String {
         if data.len() >= 2 {
             let value = u16::from_le_bytes([data[0], data[1]]);
-            let voltage = pmbus::Linear11::to_float(value);
+            let voltage = pmbus::Linear11::to_float_unsigned(value);
             format!("{:02x?} ({:.3}V)", data, voltage)
         } else {
             format!("{:02x?}", data)
@@ -749,7 +749,7 @@ pub mod protocol {
     fn decode_write_linear11_voltage(data: &[u8]) -> String {
         if data.len() >= 2 {
             let value = u16::from_le_bytes([data[0], data[1]]);
-            let decoded = pmbus::Linear11::to_float(value);
+            let decoded = pmbus::Linear11::to_float_unsigned(value);
             format!("{:02x?} ({:.3}V)", data, decoded)
         } else {
             format!("{:02x?}", data)
