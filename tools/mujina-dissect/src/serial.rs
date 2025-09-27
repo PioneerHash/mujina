@@ -116,16 +116,8 @@ impl TimestampedCodec {
     pub fn feed_event(&mut self, event: &SerialEvent) -> Vec<DecodedFrame> {
         let mut results = Vec::new();
 
-        // Check if we need to flush pending discard before processing new data
-        if let Some(ref pending) = self.pending_discard {
-            // If there's a time gap, flush the pending discard
-            if event.timestamp - pending.end_timestamp > 0.01 {
-                // 10ms gap
-                if let Some(discard) = self.pending_discard.take() {
-                    results.push(self.create_discard_frame(discard));
-                }
-            }
-        }
+        // Don't flush discarded bytes based on time - only flush when valid frame is found
+        // This ensures all consecutive invalid bytes are grouped together
 
         // Add byte to buffer and timestamp tracking
         self.buffer.extend_from_slice(&[event.data]);
