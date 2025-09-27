@@ -399,10 +399,12 @@ PLL3 configuration for multi-chip chains:
 - Only used in multi-chip configurations
 
 #### 0xA4 - VERSION_MASK
-Controls which bits of the version field can be rolled:
-- Lower 16 bits typically enabled for rolling
-- Set via Stratum configuration (e.g., 0x1FFFE000)
-- Initial enable: 0xFFFF0090 (from captures)
+Controls version rolling for AsicBoost optimization (32-bit register):
+- **Bits 0-15 (control)**: Always `0x0090` - fixed enable pattern in all implementations
+- **Bits 16-31 (mask)**: Which version bits can be rolled (from Stratum's version_mask >> 13)
+- Common values:
+  - Initial: `0xFFFF0090` (full rolling enabled)
+  - Stratum: `0x3FFF0090` (from version_mask=0x1FFFE000)
 
 #### 0xA8 - INIT_CONTROL
 Initialization control register with chip-specific values:

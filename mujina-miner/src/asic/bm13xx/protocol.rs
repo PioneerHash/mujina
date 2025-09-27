@@ -17,7 +17,7 @@
 
 use bitvec::prelude::*;
 use bytes::{Buf, BufMut, BytesMut};
-use std::io;
+use std::{fmt, io};
 use strum::FromRepr;
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -353,7 +353,7 @@ impl IoDriverStrength {
 }
 
 /// Version mask for version rolling
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct VersionMask {
     /// Which bits can be rolled
     mask: u16,
@@ -364,7 +364,7 @@ pub struct VersionMask {
 impl VersionMask {
     /// Full 16-bit mask for version rolling
     const FULL_MASK: u16 = 0xffff;
-    /// Control bits to enable version rolling
+    /// Fixed control pattern used by all implementations to enable version rolling
     const CONTROL_ENABLE: u16 = 0x0090;
 
     /// Create version mask with all lower 16 bits enabled
@@ -373,6 +373,20 @@ impl VersionMask {
             mask: Self::FULL_MASK,
             control: Self::CONTROL_ENABLE,
         }
+    }
+}
+
+impl fmt::Debug for VersionMask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let control_str = if self.control == Self::CONTROL_ENABLE {
+            "CONTROL_ENABLE".to_string()
+        } else {
+            format!("{:#06x}", self.control)
+        };
+        f.debug_struct("VersionMask")
+            .field("mask", &format_args!("{:#06x}", self.mask))
+            .field("control", &control_str)
+            .finish()
     }
 }
 
