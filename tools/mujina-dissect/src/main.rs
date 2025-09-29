@@ -12,7 +12,10 @@ use clap::Parser;
 use dissect::{dissect_decoded_frame, dissect_i2c_operation_with_context, I2cContexts};
 use i2c::{group_pmbus_transactions, group_transactions, I2cAssembler};
 use output::{OutputConfig, OutputEvent};
-use serial::{DecodedFrame, Direction, TimestampedCodec};
+use serial::{
+    CommandStreamingParser, DecodedFrame, Direction, ParsedItem, ResponseStreamingParser,
+    StreamingParser, TimestampedCodec,
+};
 use std::path::PathBuf;
 
 /// Protocol dissector for Bitcoin mining hardware captures
@@ -92,6 +95,13 @@ fn main() -> Result<()> {
     let mut ci_1m_codec = TimestampedCodec::new(Direction::HostToChip);
     let mut ro_115k_codec = TimestampedCodec::new(Direction::ChipToHost);
     let mut ro_1m_codec = TimestampedCodec::new(Direction::ChipToHost);
+
+    // Setup new streaming parsers for testing
+    let mut ci_115k_streaming = CommandStreamingParser::new();
+    let mut ci_1m_streaming = CommandStreamingParser::new();
+    let mut ro_115k_streaming = ResponseStreamingParser::new();
+    let mut ro_1m_streaming = ResponseStreamingParser::new();
+
     let mut i2c_assembler = I2cAssembler::new();
 
     // Collect all events for sorting
@@ -123,6 +133,36 @@ fn main() -> Result<()> {
                 let frames = codec.feed_event(&serial_event, serial_event.baud_rate);
                 for frame in frames {
                     decoded_frames.push((frame, serial_event.baud_rate));
+                }
+
+                // Test new streaming parser for CI 1M only (where JobFull commands are)
+                if serial_event.channel == Channel::CI && serial_event.baud_rate == BaudRate::Baud1M
+                {
+                    for parsed_item in ci_1m_streaming.process_event(&serial_event) {
+                        match parsed_item {
+                            ParsedItem::ValidFrame {
+                                command,
+                                raw_bytes,
+                                timestamps,
+                            } => {
+                                let frame = DecodedFrame::Command {
+                                    timestamp: timestamps
+                                        .last()
+                                        .copied()
+                                        .unwrap_or(serial_event.timestamp),
+                                    command,
+                                    raw_bytes,
+                                    has_errors: false,
+                                    baud_rate: serial_event.baud_rate,
+                                };
+                                decoded_frames.push((frame, serial_event.baud_rate));
+                            }
+                            ParsedItem::InvalidBytes { .. } => {
+                                // Silently ignore invalid bytes for now
+                            }
+                            _ => {} // Handle other cases if needed
+                        }
+                    }
                 }
             }
             CaptureEvent::I2c(i2c_event) => {
