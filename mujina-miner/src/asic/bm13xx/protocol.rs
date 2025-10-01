@@ -457,9 +457,13 @@ pub enum BaudRate {
 impl From<BaudRate> for [u8; 4] {
     fn from(baud: BaudRate) -> Self {
         let value = match baud {
-            BaudRate::Baud115200 => 0x00000271, // From ESP-miner
-            BaudRate::Baud1M => 0x00000130,
-            BaudRate::Baud3M => 0x00003001, // From captures
+            // From esp-miner BM1370/BM1366/BM1368 default baud config
+            BaudRate::Baud115200 => 0x00000271,
+            // From esp-miner BM1370_set_max_baud/BM1366_set_max_baud/BM1368_set_max_baud
+            // All three chips use identical register value for 1Mbaud
+            BaudRate::Baud1M => 0x00023011,
+            // From S21 Pro captures (BM1370 multi-chip chains)
+            BaudRate::Baud3M => 0x00003001,
             BaudRate::Custom(val) => val,
         };
         value.to_le_bytes()
