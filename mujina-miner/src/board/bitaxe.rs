@@ -88,6 +88,7 @@ pub struct BitaxeBoard {
     /// Reader for receiving responses from chips (transferred to event monitor during initialize)
     data_reader: Option<FramedRead<TracingReader<SerialReader>, bm13xx::FrameCodec>>,
     /// Control handle for data channel (for baud rate changes)
+    #[expect(dead_code, reason = "will be used when baud rate change is fixed")]
     data_control: SerialControl,
     /// Protocol handler for chip communication
     protocol: BM13xxProtocol,
@@ -111,7 +112,9 @@ impl BitaxeBoard {
 
     /// Bitaxe Gamma board configuration
     /// The Gamma uses a BM1370 chip and runs at 1Mbps after initialization
+    #[expect(dead_code, reason = "will be used when baud rate change is fixed")]
     const TARGET_BAUD_RATE: u32 = 1_000_000;
+    #[expect(dead_code, reason = "will be used when baud rate change is fixed")]
     const CHIP_BAUD_REGISTER: bm13xx::protocol::BaudRate = bm13xx::protocol::BaudRate::Baud1M;
     const EXPECTED_CHIP_ID: [u8; 2] = [0x13, 0x70]; // BM1370
 
@@ -1066,39 +1069,12 @@ impl Board for BitaxeBoard {
         };
         self.send_config_command(nonce_range_cmd).await?;
 
-        // UartBaud = 0x00023011 (1M baud) - sent after frequency ramping
-        tracing::info!(
-            "Sending baud rate change command to BM1370 for {} baud",
-            Self::TARGET_BAUD_RATE
-        );
-        let baud_cmd = Command::WriteRegister {
-            broadcast: true,
-            chip_address: 0x00,
-            register: bm13xx::protocol::Register::UartBaud(Self::CHIP_BAUD_REGISTER),
-        };
-        self.send_config_command(baud_cmd).await?;
-
-        // Give chip time to process baud rate change
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        // Change host baud rate to match
-        tracing::info!(
-            "Changing host serial port from 115200 to {} baud",
-            Self::TARGET_BAUD_RATE
-        );
-        self.data_control
-            .set_baud_rate(Self::TARGET_BAUD_RATE)
-            .map_err(|e| {
-                BoardError::InitializationFailed(format!("Failed to change baud rate: {}", e))
-            })?;
-
-        // Wait for baud rate change to stabilize
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        tracing::info!(
-            "Baud rate change complete, continuing at {} baud",
-            Self::TARGET_BAUD_RATE
-        );
+        // TODO: Implement baud rate change to 1M baud after frequency ramping
+        // Linux CDC ACM driver doesn't appear to send SET_LINE_CODING USB control
+        // requests, so bitaxe-raw firmware never changes UART baud rate. Need to either:
+        // 1. Use rusb to send SET_LINE_CODING directly, or
+        // 2. Implement a bitaxe-raw control channel command for baud rate changes
+        tracing::info!("Skipping baud rate change, staying at 115200");
 
         // Step 9: Version Mask Re-Send (final)
         // After all configuration, send version mask once more
