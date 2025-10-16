@@ -391,6 +391,13 @@ Write round-trip tests for protocol encoding/decoding to ensure consistency.
 Mock hardware interfaces for unit testing. Physical hardware is required
 for integration testing. Always ask before running on hardware.
 
+### Time-Dependent Tests [TEST.time](#TEST.time)
+
+Use `#[tokio::test(start_paused = true)]` for testing timers and intervals.
+Time auto-advances when the runtime is idle, so tests complete instantly while
+using realistic durations. Requires `tokio = { features = ["test-util"] }` in
+`[dev-dependencies]`. See: https://docs.rs/tokio/latest/tokio/time/fn.pause.html
+
 ## Hardware Interaction
 
 ### Trace Hardware Communication [H.trace](#H.trace)
