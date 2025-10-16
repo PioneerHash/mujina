@@ -16,9 +16,7 @@ use tracing::{debug, info};
 
 use super::messages::{SourceCommand, SourceEvent, SourceHandle};
 use super::test_blocks::block_881423;
-use super::{
-    Extranonce2Template, JobTemplate, MerkleRootKind, MerkleRootTemplate, VersionTemplate,
-};
+use super::{Extranonce2Range, JobTemplate, MerkleRootKind, MerkleRootTemplate, VersionTemplate};
 
 /// Dummy job source that generates work from test block data.
 ///
@@ -62,9 +60,9 @@ impl DummySource {
         let extranonce2_bytes = block_881423::extranonce2_bytes();
         let extranonce2_actual = u32::from_le_bytes(extranonce2_bytes.try_into().expect("4 bytes"));
 
-        // Create extranonce2 template with a small range around the winning value
+        // Create extranonce2 range around the winning value
         // This gives hardware high probability of hitting the real block hash
-        let extranonce2_template = Extranonce2Template::new_range(
+        let extranonce2_range = Extranonce2Range::new_range(
             extranonce2_actual as u64,
             extranonce2_actual as u64 + 100, // Small range for quick testing
             4,                               // 4 bytes
@@ -94,7 +92,7 @@ impl DummySource {
             merkle_root: MerkleRootKind::Computed(MerkleRootTemplate {
                 coinbase1: block_881423::coinbase1_bytes().to_vec(),
                 extranonce1: block_881423::extranonce1_bytes().to_vec(),
-                extranonce2: extranonce2_template,
+                extranonce2_range: extranonce2_range,
                 coinbase2: block_881423::coinbase2_bytes().to_vec(),
                 merkle_branches,
             }),
@@ -244,8 +242,8 @@ mod tests {
             _ => panic!("Expected computed merkle root"),
         };
 
-        // Get the winning extranonce2 value (first in our template range)
-        let extranonce2 = merkle_template.extranonce2.current();
+        // Get the winning extranonce2 value (first in our range)
+        let extranonce2 = merkle_template.extranonce2_range.iter().next().unwrap();
 
         // Build the complete coinbase transaction
         let mut coinbase_bytes = Vec::new();

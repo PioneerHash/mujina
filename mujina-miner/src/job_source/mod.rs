@@ -23,7 +23,7 @@
 //!
 //! 1. **[`JobTemplate`]** (from pool/source) - Contains all templates:
 //!    - Version rolling mask ([`VersionTemplate`])
-//!    - Extranonce2 space ([`Extranonce2Template`])
+//!    - Extranonce2 space ([`Extranonce2Range`])
 //!    - Merkle root specification ([`MerkleRootKind`])
 //!
 //! 2. **`HeaderTemplate`** (to hardware) - Partially instantiated:
@@ -49,7 +49,7 @@ mod test_blocks;
 mod version;
 
 // Re-export types from submodules
-pub use extranonce2::{Extranonce2, Extranonce2Error, Extranonce2Template};
+pub use extranonce2::{Extranonce2, Extranonce2Error, Extranonce2Iter, Extranonce2Range};
 pub use job::{JobTemplate, Share};
 pub use merkle::{MerkleRootKind, MerkleRootTemplate};
 pub use messages::{SourceCommand, SourceEvent, SourceHandle};

@@ -2,7 +2,7 @@
 
 use bitcoin::hash_types::TxMerkleNode;
 
-use super::extranonce2::Extranonce2Template;
+use super::extranonce2::Extranonce2Range;
 
 /// Specifies how to obtain the merkle root for a mining job.
 ///
@@ -45,11 +45,11 @@ pub struct MerkleRootTemplate {
     /// this source.
     pub extranonce1: Vec<u8>,
 
-    /// Extranonce2 template defining the rolling space.
+    /// Extranonce2 range defining the available rolling space.
     ///
-    /// The caller will roll through this space, generating different extranonce2
-    /// values to create unique block headers.
-    pub extranonce2: Extranonce2Template,
+    /// The caller will create an iterator from this range to generate different
+    /// extranonce2 values for unique block headers.
+    pub extranonce2_range: Extranonce2Range,
 
     /// Second part of coinbase transaction (after extranonces).
     pub coinbase2: Vec<u8>,
