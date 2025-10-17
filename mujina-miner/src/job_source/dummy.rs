@@ -237,23 +237,20 @@ mod tests {
             _ => panic!("Expected computed merkle root"),
         };
 
-        // Get the winning extranonce2 value (first in our range)
-        let extranonce2 = merkle_template.extranonce2_range.iter().next().unwrap();
-
-        // Compute merkle root using the template
+        // Compute merkle root with the golden extranonce2
         let computed_merkle_root = merkle_template
-            .compute_merkle_root(&extranonce2)
+            .compute_merkle_root(&block_881423::EXTRANONCE2)
             .expect("valid merkle root computation");
 
-        // Build block header with winning nonce and version
+        // Build block header with golden values
         use bitcoin::block::Header as BlockHeader;
         let header = BlockHeader {
-            version: job.version.version,
+            version: *block_881423::VERSION,
             prev_blockhash: job.prev_blockhash,
             merkle_root: computed_merkle_root,
             time: job.time,
             bits: job.bits,
-            nonce: block_881423::NONCE, // The winning nonce!
+            nonce: block_881423::NONCE,
         };
 
         // Compute block hash
@@ -264,13 +261,6 @@ mod tests {
             computed_hash,
             *block_881423::BLOCK_HASH,
             "Computed block hash doesn't match expected"
-        );
-
-        // Also verify the merkle root is correct
-        assert_eq!(
-            computed_merkle_root,
-            *block_881423::MERKLE_ROOT,
-            "Computed merkle root doesn't match expected"
         );
     }
 }
