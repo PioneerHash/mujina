@@ -398,6 +398,81 @@ Time auto-advances when the runtime is idle, so tests complete instantly while
 using realistic durations. Requires `tokio = { features = ["test-util"] }` in
 `[dev-dependencies]`. See: https://docs.rs/tokio/latest/tokio/time/fn.pause.html
 
+### Test Behaviors, Not Implementation Details [TEST.behavior](#TEST.behavior)
+
+Write tests that verify behavior and contracts rather than implementation
+details. Tests should survive refactoring when the behavior remains the same.
+
+```rust
+// Bad: Tests hardcoded implementation details
+#[test]
+fn test_specificity_calculation() {
+    let pattern = BoardPattern { vid: Some(0x1234), ..Default::default() };
+    assert_eq!(pattern.specificity(), 10);  // Breaks if scoring changes
+}
+
+// Good: Tests relative behavior (the actual contract)
+#[test]
+fn test_specificity_ordering() {
+    let vid_only = BoardPattern { vid: Some(0x1234), ..Default::default() };
+    let vid_and_pid = BoardPattern {
+        vid: Some(0x1234),
+        pid: Some(0x5678),
+        ..Default::default()
+    };
+
+    // Contract: more fields = higher specificity
+    assert!(vid_and_pid.specificity() > vid_only.specificity());
+}
+```
+
+Hardcoded value assertions couple tests to implementation. If you change
+internal scoring weights, all tests break even though the **relative
+ordering** (which is what actually matters) might still be correct. Relative
+assertions test the invariant that matters and survive refactoring.
+
+### Tests Should Demonstrate the Contract [TEST.contract](#TEST.contract)
+
+Good tests serve as executable documentation that demonstrates how the system
+works. Write integration-style tests that show real-world usage patterns.
+
+```rust
+#[test]
+fn test_best_match_selection() {
+    // Setup: device that could match multiple patterns
+    let device = make_device(0x0403, 0x6015, Some("FTDI"), Some("Bitaxe Gamma"));
+
+    // Three patterns all match the device:
+    let generic_ftdi = BoardPattern {
+        vid: Some(0x0403),
+        manufacturer: Some(StringMatch::Contains("FTDI".to_string())),
+        ..Default::default()
+    };
+    let bitaxe = BoardPattern {
+        vid: Some(0x0403),
+        pid: Some(0x6015),
+        product: Some(StringMatch::Regex(Regex::new("Bitaxe").unwrap())),
+        ..Default::default()
+    };
+    let bitaxe_gamma = BoardPattern { /* all fields specified */ };
+
+    // Contract: registry picks the most specific match
+    let patterns = vec![&generic_ftdi, &bitaxe, &bitaxe_gamma];
+    let best = patterns.into_iter()
+        .filter(|p| p.matches(&device))
+        .max_by_key(|p| p.specificity())
+        .unwrap();
+
+    assert_eq!(best.specificity(), bitaxe_gamma.specificity());
+}
+```
+
+This test reads like documentation - it shows exactly how the registry resolves
+conflicts when multiple boards could handle a device. Anyone reading this test
+immediately understands the system's behavior. Integration-style tests are more
+valuable than unit tests for complex systems because they test the whole
+working together, which is what users actually care about.
+
 ## Hardware Interaction
 
 ### Trace Hardware Communication [H.trace](#H.trace)
