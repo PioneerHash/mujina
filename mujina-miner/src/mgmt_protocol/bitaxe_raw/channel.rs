@@ -14,7 +14,6 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 use super::{ControlCodec, Packet, Response};
-use tracing::trace;
 
 /// Control channel for bitaxe-raw protocol communication.
 ///
@@ -53,16 +52,7 @@ impl ControlChannel {
         inner.next_id = inner.next_id.wrapping_add(1);
         let expected_id = packet.id;
 
-        trace!(
-            "Sending control packet: id={}, page={:?}, command={:#02x}, data_len={}",
-            packet.id,
-            packet.page,
-            packet.command,
-            packet.data.len()
-        );
-        trace!("Control packet data: {:02x?}", packet.data);
-
-        // Send the packet
+        // Send the packet (logging happens in encoder)
         inner.writer.send(packet).await?;
 
         // Wait for response with matching ID

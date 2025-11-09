@@ -237,17 +237,6 @@ impl Decoder for ControlCodec {
         // Total packet size = 2 (length) + 1 (ID) + length_field
         let total_packet_size = 2 + 1 + length_field;
 
-        trace!(
-            "Control decoder: received {} bytes, length field = {}, total packet size = {}",
-            src.len(),
-            length_field,
-            total_packet_size
-        );
-        trace!(
-            "Control decoder: raw bytes = {:02x?}",
-            &src[..std::cmp::min(src.len(), 10)]
-        );
-
         if total_packet_size > self.max_length {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -262,12 +251,21 @@ impl Decoder for ControlCodec {
 
         // Consume the complete packet
         let packet_data = src.split_to(total_packet_size);
-        trace!("Control decoder: packet data = {:02x?}", packet_data);
 
         // Skip the 2-byte length field
         let response_data = &packet_data[2..];
 
-        Response::parse(response_data).map(Some)
+        let response = Response::parse(response_data)?;
+
+        trace!(
+            id = response.id,
+            status = if response.error.is_some() { "ERR" } else { "OK" },
+            data = ?response.data,
+            frame = ?packet_data,
+            "RX control"
+        );
+
+        Ok(Some(response))
     }
 }
 
@@ -283,9 +281,12 @@ impl Encoder<Packet> for ControlCodec {
             ));
         }
         trace!(
-            "Control encoder: sending {} bytes: {:02x?}",
-            encoded.len(),
-            encoded
+            id = item.id,
+            page = ?item.page,
+            cmd = %format!("{:#04x}", item.command),
+            data = ?item.data,
+            frame = ?encoded,
+            "TX control"
         );
         dst.extend_from_slice(&encoded);
         Ok(())

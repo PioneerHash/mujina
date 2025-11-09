@@ -1149,10 +1149,10 @@ impl Encoder<Command> for FrameCodec {
 
         // Log the encoded frame for debugging
         trace!(
-            "TX: {:?} ({} bytes) => {:02x?}",
-            command,
-            dst.len(),
-            dst.as_ref()
+            cmd = ?command,
+            bytes = dst.len(),
+            frame = ?dst.as_ref(),
+            "TX BM13xx"
         );
 
         Ok(())
@@ -1241,10 +1241,10 @@ impl Decoder for FrameCodec {
 
                 // Log the received frame for debugging
                 trace!(
-                    "RX: {:?} ({} bytes) => {:02x?}",
-                    response,
-                    FRAME_LEN,
-                    frame_bytes
+                    resp = ?response,
+                    bytes = FRAME_LEN,
+                    frame = ?frame_bytes,
+                    "RX BM13xx"
                 );
                 Ok(Some(response))
             }
