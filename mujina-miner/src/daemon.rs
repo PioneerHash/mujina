@@ -9,6 +9,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::tracing::prelude::*;
 use crate::{
+    api::{self, ApiConfig},
     backplane::Backplane,
     hash_thread::HashThread,
     job_source::{dummy::DummySource, SourceEvent},
@@ -93,6 +94,18 @@ impl Daemon {
             thread_rx,
             source_reg_rx,
         ));
+
+        // Start the API server
+        self.tracker.spawn({
+            let shutdown = self.shutdown.clone();
+            async move {
+                let config = ApiConfig::default();
+                if let Err(e) = api::serve(config, shutdown).await {
+                    error!("API server error: {}", e);
+                }
+            }
+        });
+
         self.tracker.close();
 
         info!("Started.");
