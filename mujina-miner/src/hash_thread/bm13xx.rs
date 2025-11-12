@@ -25,6 +25,7 @@ use crate::{
     board::bitaxe::{BitaxePeripherals, ThreadRemovalSignal},
     hw_trait::gpio::{GpioPin, PinValue},
     tracing::prelude::*,
+    types::DisplayDifficulty,
 };
 
 /// Tracks tasks sent to chip hardware, indexed by chip_job_id.
@@ -908,8 +909,8 @@ async fn bm13xx_thread_actor<R, W>(
                                                 trace!(
                                                     chip_job_id = job_id,
                                                     nonce = format!("{:#x}", nonce),
-                                                    hash = %hash,
-                                                    target = %target,
+                                                    hash_diff = %DisplayDifficulty::from_hash(&hash),
+                                                    target_diff = %DisplayDifficulty::from_target(&target),
                                                     "Nonce does not meet target (filtered)"
                                                 );
                                             }
