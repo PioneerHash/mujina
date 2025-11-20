@@ -3,10 +3,24 @@
 //! This module provides known-good test data extracted from actual chip
 //! communication on Bitaxe Gamma (single BM1370).
 //!
-//! This module serves serves as a rosetta stone between Stratum v1, Rust
-//! Bitcoin's internal format, and the BM13xx wire protocol. It demonstrates
-//! the correct transformations between these formats, validated against a real
-//! mining round-trip from pool to chip and back.
+//! This module serves as a rosetta stone between Stratum v1, Rust Bitcoin's
+//! internal format, and the BM13xx wire protocol. It demonstrates the correct
+//! transformations between these formats, validated against a real mining
+//! round-trip from pool to chip and back.
+//!
+//! # Testing Strategy
+//!
+//! This module is a **data source only**. Tests here validate the internal
+//! consistency of the test data itself (e.g., that Stratum constants match
+//! wire frame values, that computed merkle roots match captured values).
+//!
+//! **Parser tests live in their respective modules:**
+//! - Stratum parsing tests → `stratum_v1::messages::tests`
+//! - Job conversion tests → `job_source::stratum_v1::tests`
+//! - Wire protocol tests → `asic::bm13xx::protocol::tests`
+//!
+//! This separation ensures test_data remains a reference dataset that other
+//! modules can depend on without circular dependencies.
 
 use bitcoin::hash_types::TxMerkleNode;
 use bitcoin::hashes::Hash;
@@ -14,37 +28,9 @@ use bitcoin::pow::CompactTarget;
 use bitcoin::BlockHash;
 use std::sync::LazyLock;
 
+// Reference capture log showing the complete mining round-trip:
 //
-// ```text
-// [2025-06-19T14:45:28.918] stratum_task: rx:
-// {
-//   "id": null,
-//   "method": "mining.notify",
-//   "params": [
-//     "875b4b7",
-//     "6b6455fd6db962c101f2d4fc0d67f4a3bc96391d000152960000000000000000",
-//     "02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff170330c30d5075626c69632d506f6f6c",
-//     "ffffffff02e5b5c61200000000220020984a77c289084ff2d434c316bdada021c6c183d507c8a20d3b159b09ac02fe280000000000000000266a24aa21a9edb98ee50410ed4abd48401ed484fc874409d086a3faf0816136a8ad6168314c5800000000",
-//     [
-//       "21af451ddb51e887ff1feb5592b87290098565035eb8500031aedcc776d4e72a",
-//       "c5af269519c809a9546d5a58ca6445d3dbb80cb7045448ecc48309af034da8f8",
-//       "fb9f8f9959f6bb0ceb63fa53aed1d5a615c6b6d3f50a468ea89a45a1234bda74",
-//       "a4f4fee8e5fc19ca8d93e67b9236c37ddb864982010434745c0abfe9b914980c",
-//       "33092206642744fbe5499c3e621cd5c6b52733e54fbebd869f070082b807f740",
-//       "3b857e32c5cff4864efab967b9a456ca03b2167ab96bd9076ce294c8a67a7fe2",
-//       "881a07cd881d0c3e590b4b090ea8d58e1439dc56c63686f7de23c47045441e30",
-//       "315e4dbcc8e7b1c9d594a73978268791880dddb2c26eec8e75768668dad99d80",
-//       "69952b77c632be16b1ac7ac7048f13d4e962b2e215d79a343f01e6e281d7c304",
-//       "fc63eb4392c4d6c6d689788875fca35143fdcd4f4a82e8698e0e441751a70b4a",
-//       "09e419bbe20aa3a7640f1b91f50599ceddff899e90d3f18951ad5418c4850a6b",
-//       "004978aa346b4f1880bcadb3ca3792d771ee6aeca427f61e74baba44b75cfb88"
-//     ],
-//     "20000000",
-//     "17023a04",
-//     "685468d7",
-//     false
-//   ]
-// }
+// [2025-06-19T14:45:28.918] stratum_task: rx: <MINING_NOTIFY>
 //
 // [2025-06-19T14:45:46.442] I (131071) bm1370: Send Job: 68
 // [2025-06-19T14:45:46.446] tx: [55 AA 21 56 68 01 00 00 00 00 04 3A 02 17 D7 68 54 68
@@ -58,12 +44,66 @@ use std::sync::LazyLock;
 // [2025-06-19T14:45:46.526] I (131148) asic_result: ID: 875b4b7, ver: 20B44000
 //                                      Nonce 7552034C diff 29588.0 of 8192.
 //
-// [2025-06-19T14:45:46.537] I (131155) stratum_api: tx: {"id": 11, "method": "mining.submit",
-//                                      "params": ["bc1q...bitaxe",
-//                                      "875b4b7", "17000000", "685468d7", "7552034c", "00b44000"]}
+// [2025-06-19T14:45:46.537] I (131155) stratum_api: tx: <MINING_SUBMIT>
 // [2025-06-19T14:45:46.603] I (131231) stratum_task: rx: {"id":11,"error":null,"result":true}
 // [2025-06-19T14:45:46.604] I (131232) stratum_task: message result accepted
 //
+
+/// Raw Stratum JSON messages from the capture.
+///
+/// These are the actual wire messages exchanged with the pool. The rosetta
+/// stone tests parse these and validate against the broken-out constants.
+pub mod stratum_json {
+    /// mining.notify message received from pool
+    ///
+    /// This is the exact JSON received over the wire that triggered the
+    /// mining round resulting in an accepted share.
+    pub const MINING_NOTIFY: &str = r#"{
+  "id": null,
+  "method": "mining.notify",
+  "params": [
+    "875b4b7",
+    "6b6455fd6db962c101f2d4fc0d67f4a3bc96391d000152960000000000000000",
+    "02000000010000000000000000000000000000000000000000000000000000000000000000ffffffff170330c30d5075626c69632d506f6f6c",
+    "ffffffff02e5b5c61200000000220020984a77c289084ff2d434c316bdada021c6c183d507c8a20d3b159b09ac02fe280000000000000000266a24aa21a9edb98ee50410ed4abd48401ed484fc874409d086a3faf0816136a8ad6168314c5800000000",
+    [
+      "21af451ddb51e887ff1feb5592b87290098565035eb8500031aedcc776d4e72a",
+      "c5af269519c809a9546d5a58ca6445d3dbb80cb7045448ecc48309af034da8f8",
+      "fb9f8f9959f6bb0ceb63fa53aed1d5a615c6b6d3f50a468ea89a45a1234bda74",
+      "a4f4fee8e5fc19ca8d93e67b9236c37ddb864982010434745c0abfe9b914980c",
+      "33092206642744fbe5499c3e621cd5c6b52733e54fbebd869f070082b807f740",
+      "3b857e32c5cff4864efab967b9a456ca03b2167ab96bd9076ce294c8a67a7fe2",
+      "881a07cd881d0c3e590b4b090ea8d58e1439dc56c63686f7de23c47045441e30",
+      "315e4dbcc8e7b1c9d594a73978268791880dddb2c26eec8e75768668dad99d80",
+      "69952b77c632be16b1ac7ac7048f13d4e962b2e215d79a343f01e6e281d7c304",
+      "fc63eb4392c4d6c6d689788875fca35143fdcd4f4a82e8698e0e441751a70b4a",
+      "09e419bbe20aa3a7640f1b91f50599ceddff899e90d3f18951ad5418c4850a6b",
+      "004978aa346b4f1880bcadb3ca3792d771ee6aeca427f61e74baba44b75cfb88"
+    ],
+    "20000000",
+    "17023a04",
+    "685468d7",
+    false
+  ]
+}"#;
+
+    /// mining.submit message sent to pool
+    ///
+    /// This is the share submission that was accepted by the pool.
+    /// Note: username is redacted in this capture.
+    pub const MINING_SUBMIT: &str = r#"{
+  "id": 11,
+  "method": "mining.submit",
+  "params": [
+    "bc1q...bitaxe",
+    "875b4b7",
+    "17000000",
+    "685468d7",
+    "7552034c",
+    "00b44000"
+  ]
+}"#;
+}
 
 /// Test data from Bitaxe Gamma esp-miner with complete Stratum round-trip
 pub mod esp_miner_job {
@@ -206,8 +246,20 @@ pub mod esp_miner_job {
     /// Pool share difficulty threshold (from Stratum mining.set_difficulty)
     pub const POOL_SHARE_DIFFICULTY: f64 = 8192.0;
 
+    /// Pool share difficulty as integer for tests
+    pub const POOL_SHARE_DIFFICULTY_INT: u64 = 8192;
+
+    /// Version mask authorized by pool (standard BIP320 mask)
+    ///
+    /// This is the typical mask returned by pools in mining.configure response.
+    /// Bits 13-28 (0x1fffe000) are available for version rolling.
+    pub const VERSION_MASK: u32 = 0x1fffe000;
+
     /// Extranonce1 from mining.subscribe response
     pub const STRATUM_EXTRANONCE1: &str = "4128064f";
+
+    /// Extranonce2 size from mining.subscribe response
+    pub const STRATUM_EXTRANONCE2_SIZE: usize = 4;
 
     /// Fields from mining.notify in the capture
     pub mod notify {
