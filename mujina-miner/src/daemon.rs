@@ -66,17 +66,17 @@ impl Daemon {
 
         // Create job source (Stratum v1 or Dummy)
         // Controlled by environment variables:
-        // - POOL_URL: Pool address (e.g., stratum+tcp://localhost:3333)
-        // - POOL_USER: Worker username
-        // - POOL_PASS: Worker password (optional, defaults to "x")
+        // - MUJINA_POOL_URL: Pool address (e.g., stratum+tcp://localhost:3333)
+        // - MUJINA_POOL_USER: Worker username (optional, defaults to "mujina-testing")
+        // - MUJINA_POOL_PASS: Worker password (optional, defaults to "x")
         let (source_event_tx, source_event_rx) = mpsc::channel::<SourceEvent>(100);
         let (source_cmd_tx, source_cmd_rx) = mpsc::channel(10);
 
-        if let Ok(pool_url) = std::env::var("POOL_URL") {
+        if let Ok(pool_url) = std::env::var("MUJINA_POOL_URL") {
             // Use Stratum v1 source
             let pool_user =
-                std::env::var("POOL_USER").unwrap_or_else(|_| "mujina-testing".to_string());
-            let pool_pass = std::env::var("POOL_PASS").unwrap_or_else(|_| "x".to_string());
+                std::env::var("MUJINA_POOL_USER").unwrap_or_else(|_| "mujina-testing".to_string());
+            let pool_pass = std::env::var("MUJINA_POOL_PASS").unwrap_or_else(|_| "x".to_string());
 
             info!(
                 pool = %pool_url,
@@ -114,7 +114,7 @@ impl Daemon {
             });
         } else {
             // Use DummySource
-            info!("Using dummy job source (set POOL_URL to use Stratum v1)");
+            info!("Using dummy job source (set MUJINA_POOL_URL to use Stratum v1)");
 
             let dummy_source = DummySource::new(
                 source_cmd_rx,
