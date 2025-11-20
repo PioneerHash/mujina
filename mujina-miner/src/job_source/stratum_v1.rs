@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
-use crate::stratum_v1::{ClientEvent, JobNotification, PoolConfig, StratumV1Client};
+use crate::stratum_v1::{ClientEvent, JobNotification, PoolConfig};
 
 use super::{
     job, Extranonce2Range, GeneralPurposeBits, JobTemplate, MerkleRootKind, MerkleRootTemplate,
@@ -115,6 +115,31 @@ impl StratumV1Source {
     /// Handle a client event.
     async fn handle_client_event(&mut self, event: ClientEvent) -> Result<()> {
         match event {
+            ClientEvent::VersionRollingConfigured { authorized_mask } => {
+                if let Some(mask) = authorized_mask {
+                    info!(
+                        mask = format!("{:#x}", mask),
+                        "Version rolling authorized by pool"
+                    );
+                } else {
+                    info!("Pool doesn't support version rolling");
+                }
+
+                // Store the mask (or lack thereof)
+                if let Some(state) = &mut self.state {
+                    state.version_mask = authorized_mask;
+                } else {
+                    // Configure happens before subscribe, so state might not exist yet
+                    // Create temporary state that will be updated by Subscribed event
+                    self.state = Some(ProtocolState {
+                        extranonce1: Vec::new(),
+                        extranonce2_size: 0,
+                        share_difficulty: None,
+                        version_mask: authorized_mask,
+                    });
+                }
+            }
+
             ClientEvent::Subscribed {
                 extranonce1,
                 extranonce2_size,
@@ -126,13 +151,19 @@ impl StratumV1Source {
                     "Subscribed to pool"
                 );
 
-                // Store protocol state
-                self.state = Some(ProtocolState {
-                    extranonce1,
-                    extranonce2_size,
-                    share_difficulty: None,
-                    version_mask: None,
-                });
+                // Update or create protocol state
+                // Preserve version_mask if already set by VersionRollingConfigured
+                if let Some(state) = &mut self.state {
+                    state.extranonce1 = extranonce1;
+                    state.extranonce2_size = extranonce2_size;
+                } else {
+                    self.state = Some(ProtocolState {
+                        extranonce1,
+                        extranonce2_size,
+                        share_difficulty: None,
+                        version_mask: None,
+                    });
+                }
             }
 
             ClientEvent::NewJob(job) => {
@@ -198,12 +229,13 @@ impl StratumV1Source {
             .map(Vec::from)
             .unwrap_or_else(|| vec![0; state.extranonce2_size]);
 
-        // Extract version bits if version rolling was used
-        let version_bits = if share.version.to_consensus() != 0x20000000 {
-            Some(share.version.to_consensus() as u32)
-        } else {
-            None
-        };
+        // Extract version bits if version rolling was authorized
+        // Always include version_bits parameter when pool authorized rolling,
+        // even if the value is 0x00000000 (pool requires the field)
+        let version_bits = state.version_mask.map(|mask| {
+            let rolled = share.version.to_consensus() as u32;
+            rolled & mask
+        });
 
         Ok(crate::stratum_v1::SubmitParams {
             username: self.config.username.clone(),

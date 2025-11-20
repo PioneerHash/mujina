@@ -16,6 +16,16 @@ use serde_json::Value;
 /// source) to notify about protocol state changes and new work.
 #[derive(Debug, Clone)]
 pub enum ClientEvent {
+    /// Version rolling configured (result of mining.configure)
+    ///
+    /// Emitted after mining.configure if the pool supports version rolling.
+    /// Contains the authorized mask, or None if pool declined/doesn't support.
+    VersionRollingConfigured {
+        /// Authorized version mask (bits that may be rolled)
+        /// None if pool doesn't support or declined
+        authorized_mask: Option<u32>,
+    },
+
     /// Successfully connected and subscribed to pool
     Subscribed {
         /// Extranonce1 value from subscription

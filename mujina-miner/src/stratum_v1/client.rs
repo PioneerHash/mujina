@@ -567,6 +567,12 @@ impl StratumV1Client {
         // Configure version rolling (before subscribe)
         let authorized_mask = self.configure_version_rolling(&mut conn).await?;
 
+        // Emit configuration result
+        self.event_tx
+            .send(ClientEvent::VersionRollingConfigured { authorized_mask })
+            .await
+            .map_err(|_| StratumError::Disconnected)?;
+
         // Subscribe
         info!("Subscribing to pool");
         self.subscribe(&mut conn, authorized_mask).await?;
