@@ -14,6 +14,57 @@ use crate::{
 /// Default I2C address for EMC2101
 pub const DEFAULT_ADDRESS: u8 = 0x4C;
 
+/// Fan speed percentage (0-100)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Percent(u8);
+
+impl Percent {
+    /// Creates a new percentage, clamping to 0-100 range
+    pub const fn new_clamped(value: u8) -> Self {
+        if value > 100 {
+            Self(100)
+        } else {
+            Self(value)
+        }
+    }
+
+    /// Creates a new percentage if value is in range
+    pub const fn new(value: u8) -> Option<Self> {
+        if value <= 100 {
+            Some(Self(value))
+        } else {
+            None
+        }
+    }
+
+    /// Zero speed (0%)
+    pub const ZERO: Self = Self(0);
+
+    /// Full speed (100%)
+    pub const FULL: Self = Self(100);
+
+    /// Calculate this percentage of a value
+    pub const fn of(self, value: u8) -> u8 {
+        ((self.0 as u16 * value as u16) / 100) as u8
+    }
+}
+
+impl From<Percent> for u8 {
+    fn from(p: Percent) -> u8 {
+        p.0
+    }
+}
+
+impl TryFrom<u8> for Percent {
+    type Error = HwError;
+
+    fn try_from(value: u8) -> Result<Self> {
+        Self::new(value).ok_or_else(|| {
+            HwError::InvalidParameter(format!("Percent value {} out of range 0-100", value))
+        })
+    }
+}
+
 /// Protocol dissection utilities for EMC2101
 pub mod protocol {
     /// Default I2C address for EMC2101
@@ -192,6 +243,9 @@ pub struct Emc2101<I: I2c> {
 }
 
 impl<I: I2c> Emc2101<I> {
+    /// EMC2101 uses 6-bit PWM duty cycle (0-63 = 0-100%)
+    const PWM_MAX: u8 = 63;
+
     /// Create a new EMC2101 driver with default address
     pub fn new(i2c: I) -> Self {
         Self {
@@ -262,33 +316,17 @@ impl<I: I2c> Emc2101<I> {
         Ok(())
     }
 
-    /// Set fan PWM duty cycle (0-63, where 63 = 100%)
-    /// The EMC2101 FAN_SETTING register uses a 6-bit value (0-63)
-    pub async fn set_pwm_duty(&mut self, duty: u8) -> Result<()> {
+    /// Set fan speed
+    pub async fn set_fan_speed(&mut self, speed_percent: Percent) -> Result<()> {
+        let duty = speed_percent.of(Self::PWM_MAX);
         self.write_register(regs::FAN_SETTING, duty).await
     }
 
-    /// Get current PWM duty cycle (0-63)
-    pub async fn get_pwm_duty(&mut self) -> Result<u8> {
-        self.read_register(regs::FAN_SETTING).await
-    }
-
-    /// Set fan PWM duty cycle as percentage (0-100)
-    pub async fn set_pwm_percent(&mut self, percent: u8) -> Result<()> {
-        const PWM_MAX: u8 = 63; // EMC2101 uses 6-bit PWM (0-63)
-        let duty = if percent >= 100 {
-            PWM_MAX
-        } else {
-            ((percent as u16 * PWM_MAX as u16) / 100) as u8
-        };
-        self.set_pwm_duty(duty).await
-    }
-
-    /// Get fan PWM duty cycle as percentage (0-100)
-    pub async fn get_pwm_percent(&mut self) -> Result<u8> {
-        const PWM_MAX: u8 = 63; // EMC2101 uses 6-bit PWM (0-63)
-        let duty = self.get_pwm_duty().await?;
-        Ok(((duty as u16 * 100) / PWM_MAX as u16) as u8)
+    /// Get fan speed
+    pub async fn get_fan_speed(&mut self) -> Result<Percent> {
+        let duty = self.read_register(regs::FAN_SETTING).await?;
+        let percent = ((duty as u16 * 100) / Self::PWM_MAX as u16) as u8;
+        Ok(Percent::new_clamped(percent))
     }
 
     /// Read external temperature in Celsius

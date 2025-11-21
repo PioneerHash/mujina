@@ -32,7 +32,7 @@ use crate::{
         ControlChannel,
     },
     peripheral::{
-        emc2101::Emc2101,
+        emc2101::{Emc2101, Percent},
         tps546::{Tps546, Tps546Config},
     },
     tracing::prelude::*,
@@ -480,10 +480,9 @@ impl BitaxeBoard {
         match fan.init().await {
             Ok(()) => {
                 // Set fan to full speed until closed-loop control is implemented
-                const FULL_SPEED: u8 = 100;
-                match fan.set_pwm_percent(FULL_SPEED).await {
+                match fan.set_fan_speed(Percent::FULL).await {
                     Ok(()) => {
-                        debug!("Fan speed set to {}%", FULL_SPEED);
+                        debug!("Fan speed set to 100%");
                     }
                     Err(e) => {
                         warn!("Failed to set fan speed: {}", e);
@@ -650,9 +649,9 @@ impl BitaxeBoard {
                     Err(_) => "N/A".to_string(),
                 };
 
-                // Read fan PWM duty
-                let fan_pwm = match fan.get_pwm_percent().await {
-                    Ok(p) => format!("{}%", p),
+                // Read fan speed
+                let fan_speed = match fan.get_fan_speed().await {
+                    Ok(speed_percent) => format!("{}%", u8::from(speed_percent)),
                     Err(_) => "N/A".to_string(),
                 };
 
@@ -735,7 +734,7 @@ impl BitaxeBoard {
                 info!(
                     chip_count,
                     asic_temp = %temp,
-                    fan_pwm = %fan_pwm,
+                    fan_speed = %fan_speed,
                     fan_rpm = %fan_rpm,
                     vr_temp = %vr_temp,
                     power = %power_w,
@@ -889,8 +888,8 @@ impl Board for BitaxeBoard {
 
         // Reduce fan speed (no more heat generation)
         if let Some(ref mut fan) = self.fan_controller {
-            const SHUTDOWN_FAN_SPEED: u8 = 25;
-            if let Err(e) = fan.set_pwm_percent(SHUTDOWN_FAN_SPEED).await {
+            let shutdown_speed = Percent::new_clamped(25);
+            if let Err(e) = fan.set_fan_speed(shutdown_speed).await {
                 warn!("Failed to set fan speed: {}", e);
             }
         }
