@@ -3,5 +3,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Bug Reports, Feature Requests, Questions
-    url: https://github.com/mujina/mujina-miner/discussions/new/choose
+    url: https://github.com/256foundation/mujina/discussions/new/choose
     about: Start here for all bugs, features, and questions. Discussions help us understand the issue before creating actionable work items.

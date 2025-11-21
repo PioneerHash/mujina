@@ -11,7 +11,7 @@ discussed and confirmed. This helps ensure all issues are actionable and
 ready to be worked on.
 
 **To report a bug, suggest a feature, or ask a question:**
-1. Visit our [Discussions page](https://github.com/mujina/mujina-miner/discussions/new/choose)
+1. Visit our [Discussions page](https://github.com/256foundation/mujina/discussions/new/choose)
 2. Choose the appropriate category
 3. Fill out the template
 

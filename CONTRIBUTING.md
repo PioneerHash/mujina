@@ -20,18 +20,18 @@ will be merged.
    and fill in the template completely. Use this category only for bug
    reports---thank you!
 
-[discussions]: https://github.com/mujina/mujina-miner/discussions
-[issue tracker]: https://github.com/mujina/mujina-miner/issues
-[closed issues]: https://github.com/mujina/mujina-miner/issues?q=is%3Aissue+state%3Aclosed
-[closed discussions]: https://github.com/mujina/mujina-miner/discussions?discussions_q=is%3Aclosed
-["Issue Triage" discussion]: https://github.com/mujina/mujina-miner/discussions/new?category=issue-triage
+[discussions]: https://github.com/256foundation/mujina/discussions
+[issue tracker]: https://github.com/256foundation/mujina/issues
+[closed issues]: https://github.com/256foundation/mujina/issues?q=is%3Aissue+state%3Aclosed
+[closed discussions]: https://github.com/256foundation/mujina/discussions?discussions_q=is%3Aclosed
+["Issue Triage" discussion]: https://github.com/256foundation/mujina/discussions/new?category=issue-triage
 
 ### I have an idea for a feature
 
 Open a discussion in the ["Ideas" category] to propose and discuss the
 feature before implementation.
 
-["Ideas" category]: https://github.com/mujina/mujina-miner/discussions/new?category=ideas
+["Ideas" category]: https://github.com/256foundation/mujina/discussions/new?category=ideas
 
 ### I've implemented a feature
 
@@ -49,7 +49,7 @@ first issue" are extra friendly to new contributors.
 
 Open a [Q&A discussion] or ask in our community chat (if available).
 
-[Q&A discussion]: https://github.com/mujina/mujina-miner/discussions/new?category=q-a
+[Q&A discussion]: https://github.com/256foundation/mujina/discussions/new?category=q-a
 
 ## General Patterns
 
@@ -114,12 +114,12 @@ will be accepted with a high degree of certainty.
 1. Fork the repository on GitHub
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/mujina-miner.git
+   git clone https://github.com/YOUR_USERNAME/mujina.git
    cd mujina-miner
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/mujina/mujina-miner.git
+   git remote add upstream https://github.com/256foundation/mujina.git
    ```
 4. **Set up Git hooks** (required):
    ```bash

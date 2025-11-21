@@ -6,8 +6,8 @@ body:
     attributes:
       value: |
         > [!IMPORTANT]
-        > Please search for both existing [Discussions](https://github.com/mujina/mujina-miner/discussions?discussions_q=)
-        > and [Issues](https://github.com/mujina/mujina-miner/issues)
+        > Please search for both existing [Discussions](https://github.com/256foundation/mujina/discussions?discussions_q=)
+        > and [Issues](https://github.com/256foundation/mujina/issues)
         > prior to opening a new Discussion to avoid duplicates.
         >
         > This template is inspired by [Ghostty's contribution
