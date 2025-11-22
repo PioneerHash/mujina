@@ -36,6 +36,9 @@ pub struct StratumV1Source {
 
     /// Protocol state from subscription
     state: Option<ProtocolState>,
+
+    /// Track if first accepted share has been logged
+    first_share_logged: bool,
 }
 
 /// Protocol state after successful subscription.
@@ -68,6 +71,7 @@ impl StratumV1Source {
             command_rx,
             shutdown,
             state: None,
+            first_share_logged: false,
         }
     }
 
@@ -117,12 +121,12 @@ impl StratumV1Source {
         match event {
             ClientEvent::VersionRollingConfigured { authorized_mask } => {
                 if let Some(mask) = authorized_mask {
-                    info!(
+                    debug!(
                         mask = format!("{:#x}", mask),
                         "Version rolling authorized by pool"
                     );
                 } else {
-                    info!("Pool doesn't support version rolling");
+                    debug!("Pool doesn't support version rolling");
                 }
 
                 // Store the mask (or lack thereof)
@@ -146,9 +150,8 @@ impl StratumV1Source {
             } => {
                 info!(
                     pool = %self.config.url,
-                    extranonce1 = hex::encode(&extranonce1),
-                    extranonce2_size = %extranonce2_size,
-                    "Subscribed to pool"
+                    user = %self.config.username,
+                    "Subscribed."
                 );
 
                 // Update or create protocol state
@@ -182,7 +185,7 @@ impl StratumV1Source {
             }
 
             ClientEvent::DifficultyChanged(diff) => {
-                info!(difficulty = diff, "Pool difficulty changed");
+                debug!(difficulty = diff, "Pool difficulty changed");
                 if let Some(state) = &mut self.state {
                     state.share_difficulty = Some(diff);
                 }
@@ -195,8 +198,25 @@ impl StratumV1Source {
                 }
             }
 
-            ClientEvent::ShareAccepted { job_id } => {
-                info!(job_id = %job_id, "Share accepted by pool");
+            ClientEvent::ShareAccepted { job_id, nonce } => {
+                if !self.first_share_logged {
+                    self.first_share_logged = true;
+                    info!(
+                        pool = %self.config.url,
+                        user = %self.config.username,
+                        nonce = format!("{:#x}", nonce),
+                        job_id = %job_id,
+                        "First share accepted."
+                    );
+                } else {
+                    debug!(
+                        pool = %self.config.url,
+                        user = %self.config.username,
+                        nonce = format!("{:#x}", nonce),
+                        job_id = %job_id,
+                        "Share accepted."
+                    );
+                }
             }
 
             ClientEvent::ShareRejected { job_id, reason } => {
@@ -252,7 +272,7 @@ impl StratumV1Source {
     /// Spawns the Stratum client and bridges events between the client and
     /// the job source interface.
     pub async fn run(mut self) -> Result<()> {
-        info!(pool = %self.config.url, username = %self.config.username, "Starting Stratum v1 source");
+        debug!(pool = %self.config.url, "Connecting to pool");
 
         // Create channels for client communication
         let (client_event_tx, mut client_event_rx) = mpsc::channel(100);
@@ -316,7 +336,6 @@ impl StratumV1Source {
 
                 // Shutdown
                 _ = self.shutdown.cancelled() => {
-                    info!("Stratum v1 source shutting down");
                     break;
                 }
             }
@@ -324,10 +343,7 @@ impl StratumV1Source {
 
         // Wait for client to finish and propagate any errors
         match client_handle.await? {
-            Ok(()) => {
-                info!("Stratum client exited cleanly");
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(e) => {
                 warn!(error = %e, "Stratum client failed");
                 Err(e.into())

@@ -104,9 +104,6 @@ impl Backplane {
     async fn handle_usb_event(&mut self, event: UsbTransportEvent) -> Result<()> {
         match event {
             UsbTransportEvent::UsbDeviceConnected(device_info) => {
-                let vid = device_info.vid;
-                let pid = device_info.pid;
-
                 // Check if this device matches any registered board pattern
                 let Some(descriptor) = self.registry.find_descriptor(&device_info) else {
                     // No match - this is expected for most USB devices
@@ -121,7 +118,7 @@ impl Backplane {
                     manufacturer = ?device_info.manufacturer,
                     product = ?device_info.product,
                     serial = ?device_info.serial_number,
-                    "Matched USB device to hash board"
+                    "Hash board connected via USB."
                 );
 
                 // Create the board using the descriptor's factory function
@@ -146,8 +143,6 @@ impl Backplane {
                 // Create hash threads from the board
                 match board.create_hash_threads().await {
                     Ok(threads) => {
-                        let thread_count = threads.len();
-
                         // Store board for lifecycle management
                         self.boards.insert(board_id.clone(), board);
 
@@ -158,16 +153,6 @@ impl Backplane {
                                 error = %e,
                                 "Failed to send threads to scheduler"
                             );
-                        } else {
-                            // Single consolidated info message - board is ready
-                            info!(
-                                board = %board_info.model,
-                                serial = %board_id,
-                                threads = thread_count,
-                                vid = %format!("{:04x}", vid),
-                                pid = %format!("{:04x}", pid),
-                                "Board ready"
-                            );
                         }
                     }
                     Err(e) => {
@@ -175,7 +160,7 @@ impl Backplane {
                             board = %board_info.model,
                             serial = %board_id,
                             error = %e,
-                            "Failed to initialize board"
+                            "Hash board failed to start."
                         );
                     }
                 }

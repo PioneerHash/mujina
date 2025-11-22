@@ -43,7 +43,7 @@ pub async fn serve(config: ApiConfig, shutdown: CancellationToken) -> Result<()>
     let listener = TcpListener::bind(&config.bind_addr).await?;
     let actual_addr = listener.local_addr()?;
 
-    info!("API server listening on http://{}", actual_addr);
+    info!(url = %format!("http://{}", actual_addr), "API server listening.");
 
     // Warn if binding to non-localhost addresses
     if !actual_addr.ip().is_loopback() {
@@ -58,7 +58,6 @@ pub async fn serve(config: ApiConfig, shutdown: CancellationToken) -> Result<()>
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             shutdown.cancelled().await;
-            info!("API server shutting down");
         })
         .await?;
 

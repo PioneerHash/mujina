@@ -78,12 +78,6 @@ impl Daemon {
                 std::env::var("MUJINA_POOL_USER").unwrap_or_else(|_| "mujina-testing".to_string());
             let pool_pass = std::env::var("MUJINA_POOL_PASS").unwrap_or_else(|_| "x".to_string());
 
-            info!(
-                pool = %pool_url,
-                user = %pool_user,
-                "Using Stratum v1 job source"
-            );
-
             let stratum_config = StratumPoolConfig {
                 url: pool_url,
                 username: pool_user,
@@ -159,7 +153,7 @@ impl Daemon {
         self.tracker.close();
 
         info!("Started.");
-        info!("For hardware debugging, set RUST_LOG=mujina_miner=trace to see all communication");
+        info!("For debugging, set RUST_LOG=mujina_miner=debug or trace.");
 
         // Install signal handlers
         let mut sigint = unix::signal(SignalKind::interrupt())?;
@@ -168,10 +162,10 @@ impl Daemon {
         // Wait for shutdown signal
         tokio::select! {
             _ = sigint.recv() => {
-                info!("Received SIGINT");
+                info!("Received SIGINT.");
             },
             _ = sigterm.recv() => {
-                info!("Received SIGTERM");
+                info!("Received SIGTERM.");
             },
         }
 
