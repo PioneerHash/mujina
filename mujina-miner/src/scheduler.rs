@@ -177,41 +177,56 @@ pub async fn task(
                             "UpdateJob received"
                         );
 
-                        // Extract EN2 range (only supported for computed merkle roots)
-                        let full_en2_range = match &job_template.merkle_root {
-                            MerkleRootKind::Computed(template) => template.extranonce2_range.clone(),
-                            MerkleRootKind::Fixed(_) => {
-                                error!(job_id = %job_template.id, "Header-only jobs not supported");
-                                continue;
-                            }
-                        };
-
                         // Create active job with source association
                         let active_job = Arc::new(ActiveJob {
                             source_id,
                             template: job_template,
                         });
 
-                        // Split EN2 range among all threads
-                        let en2_slices = full_en2_range.split(threads.len())
-                            .expect("Failed to split EN2 range among threads");
+                        // Handle work assignment based on merkle root type
+                        match &active_job.template.merkle_root {
+                            MerkleRootKind::Computed(template) => {
+                                // Split EN2 range among all threads
+                                let en2_slices = template.extranonce2_range.clone().split(threads.len())
+                                    .expect("Failed to split EN2 range among threads");
 
-                        // Assign work to all threads
-                        for ((thread_id, thread), en2_range) in threads.iter_mut().zip(en2_slices) {
-                            let starting_en2 = en2_range.iter().next();
+                                // Assign work to all threads with EN2 ranges
+                                for ((thread_id, thread), en2_range) in threads.iter_mut().zip(en2_slices) {
+                                    let starting_en2 = en2_range.iter().next();
 
-                            let task = HashTask {
-                                job: active_job.clone(),
-                                en2_range: Some(en2_range),
-                                en2: starting_en2,
-                                share_target: active_job.template.share_target,
-                                ntime: active_job.template.time,
-                            };
+                                    let task = HashTask {
+                                        job: active_job.clone(),
+                                        en2_range: Some(en2_range),
+                                        en2: starting_en2,
+                                        share_target: active_job.template.share_target,
+                                        ntime: active_job.template.time,
+                                    };
 
-                            if let Err(e) = thread.update_work(task).await {
-                                error!(thread_id = ?thread_id, error = %e, "Failed to assign work");
-                            } else {
-                                thread_assignments.insert(thread_id, active_job.clone());
+                                    if let Err(e) = thread.update_work(task).await {
+                                        error!(thread_id = ?thread_id, error = %e, "Failed to assign work");
+                                    } else {
+                                        thread_assignments.insert(thread_id, active_job.clone());
+                                    }
+                                }
+                            }
+                            MerkleRootKind::Fixed(_) => {
+                                // SV2 header-only jobs: all threads use same merkle root,
+                                // vary only nonce space (handled by hardware)
+                                for (thread_id, thread) in threads.iter_mut() {
+                                    let task = HashTask {
+                                        job: active_job.clone(),
+                                        en2_range: None,
+                                        en2: None,
+                                        share_target: active_job.template.share_target,
+                                        ntime: active_job.template.time,
+                                    };
+
+                                    if let Err(e) = thread.update_work(task).await {
+                                        error!(thread_id = ?thread_id, error = %e, "Failed to assign work");
+                                    } else {
+                                        thread_assignments.insert(thread_id, active_job.clone());
+                                    }
+                                }
                             }
                         }
                     }
@@ -223,41 +238,56 @@ pub async fn task(
                             "ReplaceJob received"
                         );
 
-                        // Extract EN2 range (only supported for computed merkle roots)
-                        let full_en2_range = match &job_template.merkle_root {
-                            MerkleRootKind::Computed(template) => template.extranonce2_range.clone(),
-                            MerkleRootKind::Fixed(_) => {
-                                error!(job_id = %job_template.id, "Header-only jobs not supported");
-                                continue;
-                            }
-                        };
-
                         // Create active job with source association
                         let active_job = Arc::new(ActiveJob {
                             source_id,
                             template: job_template,
                         });
 
-                        // Split EN2 range among all threads
-                        let en2_slices = full_en2_range.split(threads.len())
-                            .expect("Failed to split EN2 range among threads");
+                        // Handle work replacement based on merkle root type
+                        match &active_job.template.merkle_root {
+                            MerkleRootKind::Computed(template) => {
+                                // Split EN2 range among all threads
+                                let en2_slices = template.extranonce2_range.clone().split(threads.len())
+                                    .expect("Failed to split EN2 range among threads");
 
-                        // Replace work on all threads (old shares invalid)
-                        for ((thread_id, thread), en2_range) in threads.iter_mut().zip(en2_slices) {
-                            let starting_en2 = en2_range.iter().next();
+                                // Replace work on all threads (old shares invalid)
+                                for ((thread_id, thread), en2_range) in threads.iter_mut().zip(en2_slices) {
+                                    let starting_en2 = en2_range.iter().next();
 
-                            let task = HashTask {
-                                job: active_job.clone(),
-                                en2_range: Some(en2_range),
-                                en2: starting_en2,
-                                share_target: active_job.template.share_target,
-                                ntime: active_job.template.time,
-                            };
+                                    let task = HashTask {
+                                        job: active_job.clone(),
+                                        en2_range: Some(en2_range),
+                                        en2: starting_en2,
+                                        share_target: active_job.template.share_target,
+                                        ntime: active_job.template.time,
+                                    };
 
-                            if let Err(e) = thread.replace_work(task).await {
-                                error!(thread_id = ?thread_id, error = %e, "Failed to replace work");
-                            } else {
-                                thread_assignments.insert(thread_id, active_job.clone());
+                                    if let Err(e) = thread.replace_work(task).await {
+                                        error!(thread_id = ?thread_id, error = %e, "Failed to replace work");
+                                    } else {
+                                        thread_assignments.insert(thread_id, active_job.clone());
+                                    }
+                                }
+                            }
+                            MerkleRootKind::Fixed(_) => {
+                                // SV2 header-only jobs: all threads use same merkle root,
+                                // vary only nonce space (handled by hardware)
+                                for (thread_id, thread) in threads.iter_mut() {
+                                    let task = HashTask {
+                                        job: active_job.clone(),
+                                        en2_range: None,
+                                        en2: None,
+                                        share_target: active_job.template.share_target,
+                                        ntime: active_job.template.time,
+                                    };
+
+                                    if let Err(e) = thread.replace_work(task).await {
+                                        error!(thread_id = ?thread_id, error = %e, "Failed to replace work");
+                                    } else {
+                                        thread_assignments.insert(thread_id, active_job.clone());
+                                    }
+                                }
                             }
                         }
                     }

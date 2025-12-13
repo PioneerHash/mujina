@@ -42,6 +42,13 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 rustix = { workspace = true }
 slotmap = { workspace = true }
+toml = { workspace = true }
+rand = { workspace = true }
+
+# Stratum V2 dependencies (aligned with sv2-apps v0.1.0)
+stratum-core = "0.1.0"
+stratum-apps = { git = "https://github.com/stratum-mining/sv2-apps", tag = "v0.1.0", features = ["network"] }
+async-channel = "1.8.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-udev = { workspace = true }

@@ -12,7 +12,7 @@ use crate::{
     api::{self, ApiConfig},
     backplane::Backplane,
     hash_thread::HashThread,
-    job_source::{dummy::DummySource, stratum_v1::StratumV1Source, SourceEvent},
+    job_source::{dummy::DummySource, stratum_v1::StratumV1Source, stratum_v2::StratumV2Source, SourceEvent},
     scheduler::{self, SourceRegistration},
     stratum_v1::PoolConfig as StratumPoolConfig,
     transport::{TransportEvent, UsbTransport},
@@ -73,39 +73,75 @@ impl Daemon {
         let (source_cmd_tx, source_cmd_rx) = mpsc::channel(10);
 
         if let Ok(pool_url) = std::env::var("MUJINA_POOL_URL") {
-            // Use Stratum v1 source
             let pool_user =
                 std::env::var("MUJINA_POOL_USER").unwrap_or_else(|_| "mujina-testing".to_string());
             let pool_pass = std::env::var("MUJINA_POOL_PASS").unwrap_or_else(|_| "x".to_string());
 
-            let stratum_config = StratumPoolConfig {
-                url: pool_url,
-                username: pool_user,
-                password: pool_pass,
-                user_agent: "mujina-miner/0.1.0-alpha".to_string(),
-                suggested_difficulty: 1024,
-            };
+            // Protocol detection based on URL scheme
+            if pool_url.starts_with("sv2+tcp://") {
+                // Use Stratum V2 source
+                info!("Detected SV2 pool URL, using Stratum V2 protocol");
 
-            let stratum_source = StratumV1Source::new(
-                stratum_config,
-                source_cmd_rx,
-                source_event_tx,
-                self.shutdown.clone(),
-            );
+                let sv2_config = crate::job_source::stratum_v2::StratumV2Config {
+                    url: pool_url,
+                    worker: pool_user,
+                    password: Some(pool_pass),
+                    user_agent: "mujina-miner/0.1.0-alpha".to_string(),
+                };
 
-            source_reg_tx
-                .send(SourceRegistration {
-                    name: "stratum-v1".into(),
-                    event_rx: source_event_rx,
-                    command_tx: source_cmd_tx,
-                })
-                .await?;
+                let sv2_source = StratumV2Source::new(
+                    sv2_config,
+                    source_cmd_rx,
+                    source_event_tx,
+                    self.shutdown.clone(),
+                );
 
-            self.tracker.spawn(async move {
-                if let Err(e) = stratum_source.run().await {
-                    error!("Stratum v1 source error: {}", e);
-                }
-            });
+                source_reg_tx
+                    .send(SourceRegistration {
+                        name: "stratum-v2".into(),
+                        event_rx: source_event_rx,
+                        command_tx: source_cmd_tx,
+                    })
+                    .await?;
+
+                self.tracker.spawn(async move {
+                    if let Err(e) = sv2_source.run().await {
+                        error!("Stratum V2 source error: {}", e);
+                    }
+                });
+            } else {
+                // Use Stratum V1 source (default)
+                info!("Using Stratum V1 protocol");
+
+                let stratum_config = StratumPoolConfig {
+                    url: pool_url,
+                    username: pool_user,
+                    password: pool_pass,
+                    user_agent: "mujina-miner/0.1.0-alpha".to_string(),
+                    suggested_difficulty: 1024,
+                };
+
+                let stratum_source = StratumV1Source::new(
+                    stratum_config,
+                    source_cmd_rx,
+                    source_event_tx,
+                    self.shutdown.clone(),
+                );
+
+                source_reg_tx
+                    .send(SourceRegistration {
+                        name: "stratum-v1".into(),
+                        event_rx: source_event_rx,
+                        command_tx: source_cmd_tx,
+                    })
+                    .await?;
+
+                self.tracker.spawn(async move {
+                    if let Err(e) = stratum_source.run().await {
+                        error!("Stratum V1 source error: {}", e);
+                    }
+                });
+            }
         } else {
             // Use DummySource
             info!("Using dummy job source (set MUJINA_POOL_URL to use Stratum v1)");

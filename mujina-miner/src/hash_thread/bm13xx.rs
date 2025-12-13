@@ -871,8 +871,15 @@ async fn bm13xx_thread_actor<R, W>(
                                     // Reconstruct full version from rolling field
                                     let full_version = version.apply_to_version(template.version.base());
 
-                                    // Compute merkle root for this task's EN2
-                                    match task.en2.as_ref().and_then(|en2| template.compute_merkle_root(en2).ok()) {
+                                    // Get merkle root: either compute from EN2 or use fixed value
+                                    use crate::job_source::MerkleRootKind;
+                                    let merkle_root_result = match &template.merkle_root {
+                                        MerkleRootKind::Computed(_) => {
+                                            task.en2.as_ref().and_then(|en2| template.compute_merkle_root(en2).ok())
+                                        }
+                                        MerkleRootKind::Fixed(merkle_root) => Some(*merkle_root),
+                                    };
+                                    match merkle_root_result {
                                         Some(merkle_root) => {
                                             // Build block header
                                             let header = BlockHeader {

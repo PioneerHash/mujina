@@ -1,2 +1,5 @@
 Cargo.lock
 /target/
+
+# Testing infrastructure (development only, not for upstream)
+/test/

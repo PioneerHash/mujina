@@ -45,3 +45,5 @@ rustix = { version = "0.38", features = ["fs", "termios"] }
 slotmap = "1.0"
 tokio-udev = "0.10"
 udev = "0.9"
+toml = "0.8"
+rand = "0.8"
